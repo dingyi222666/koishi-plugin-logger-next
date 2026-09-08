@@ -130,6 +130,8 @@
     width: 100%;
     height: 32px;
     min-height: 32px;
+    /* EP 的 `.el-button+.el-button` 会给相邻项加 12px 左外边距，清掉 */
+    margin: 0;
     padding: 0 12px;
     font-size: 14px;
     text-align: left;
@@ -166,6 +168,11 @@
     align-items: center;
     gap: 4px;
     margin-left: auto;
+}
+
+/* EP 默认给相邻按钮加 12px 左外边距，这里用 gap 统一 */
+.ll-actions .el-button + .el-button {
+    margin-left: 0;
 }
 
 /* ── 控制台 ─────────────────────────────────────────────── */
@@ -314,6 +321,7 @@
 .ll-console .el-button.ll-fold {
     height: 20px;
     min-height: 20px;
+    margin: 0;
     padding: 0 8px;
 }
 
@@ -363,5 +371,6 @@
 .ll-menu .el-button.ll-menu-item {
     height: 28px;
     min-height: 28px;
+    margin: 0;
     padding: 0 12px;
 }
