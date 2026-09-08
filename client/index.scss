@@ -99,13 +99,19 @@
     font: 600 12px var(--ll-mono);
 }
 
+/* 同样压过 `.el-button.is-link` 的 2px padding */
+.ll-query .el-button.ll-aa {
+    padding: 0;
+    height: auto;
+}
+
 .ll-suggest {
     position: absolute;
     top: 100%;
     left: 0;
     z-index: 50;
     min-width: 100%;
-    max-height: 288px;
+    max-height: 320px;
     margin-top: 4px;
     padding: 4px 0;
     overflow-y: auto;
@@ -115,14 +121,16 @@
     box-shadow: var(--k-card-shadow, 0 4px 12px rgba(0, 0, 0, 0.15));
 }
 
-.ll-suggest-item {
+/* 提高权重：Element Plus 的 `.el-button.is-link`（0,2,0）会把 padding 压回 2px */
+.ll-suggest .el-button.ll-suggest-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     width: 100%;
-    height: auto;
-    padding: 2px 12px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 12px;
     font-size: 14px;
     text-align: left;
 
@@ -185,9 +193,10 @@
 }
 
 .ll-row {
+    position: relative;
     display: flex;
     gap: 8px;
-    padding: 0 8px;
+    padding: 0 26px 0 8px;
     border-radius: 4px;
     content-visibility: auto;
     contain-intrinsic-size: auto 20px;
@@ -250,6 +259,30 @@
     white-space: inherit;
 }
 
+/* 跳转到产生这条日志的插件（原版 logger 同款箭头） */
+.ll-link {
+    position: absolute;
+    right: 2px;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: #71717a;
+    opacity: 0.45;
+    transition: opacity 0.15s;
+
+    &:hover {
+        color: #e4e4e7;
+        opacity: 1;
+    }
+}
+
+.ll-row:hover .ll-link {
+    opacity: 1;
+}
+
 .ll-hit {
     padding: 0 1px;
     border-radius: 2px;
@@ -263,7 +296,6 @@
     justify-content: flex-start;
     gap: 8px;
     width: 100%;
-    height: auto;
     padding: 0 8px;
     border-radius: 4px;
     color: #a1a1aa;
@@ -276,6 +308,13 @@
         background: rgba(255, 255, 255, 0.05);
         color: #e4e4e7;
     }
+}
+
+/* 压过 `.el-button.is-link`：折叠行保持 20px 行高 */
+.ll-console .el-button.ll-fold {
+    height: 20px;
+    min-height: 20px;
+    padding: 0 8px;
 }
 
 .ll-fold-arrow {
@@ -306,7 +345,6 @@
     display: flex;
     justify-content: flex-start;
     width: 100%;
-    height: auto;
     padding: 4px 12px;
     font-size: 14px;
     text-align: left;
@@ -319,4 +357,11 @@
         opacity: 0.5;
         pointer-events: none;
     }
+}
+
+/* 压过 `.el-button.is-link`：右键菜单项保持 28px 行高 */
+.ll-menu .el-button.ll-menu-item {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 12px;
 }

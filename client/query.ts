@@ -77,7 +77,8 @@ function tokenizeQuery(input: string): string[] {
 }
 
 function parseTerm(token: string): QueryTerm {
-    const match = token.match(/^(-?)([a-zA-Z]+)(~?):(.+)$/u)
+    // 允许空值：`name:` 正在输入时不该把日志清空
+    const match = token.match(/^(-?)([a-zA-Z]+)(~?):(.*)$/u)
     if (match !== null) {
         const key = normalizeKey(match[2]!)
         if (key !== null) {
@@ -114,6 +115,8 @@ function termMatches(
     now: number,
     caseSensitive: boolean
 ): boolean {
+    // 值还没输入完（如刚敲下 `name:`）：不参与过滤
+    if (term.value === '') return true
     if (term.key === 'level') {
         const target = LEVEL_WORDS[term.value.toLowerCase()]
         if (target === undefined) return true // 无法解析的级别：不参与过滤
@@ -172,7 +175,12 @@ export function compileQuery(
     const highlightParts = [...positive.values()]
         .flat()
         .concat(plain)
-        .filter((term) => term.key !== 'level' && term.key !== 'age')
+        .filter(
+            (term) =>
+                term.value !== '' &&
+                term.key !== 'level' &&
+                term.key !== 'age'
+        )
         .map((term) => (term.regex ? term.value : escapeRegExp(term.value)))
     let highlight: RegExp | undefined
     if (highlightParts.length > 0) {
@@ -223,16 +231,18 @@ export interface Suggestion {
 const KEY_SUGGESTIONS: Suggestion[] = [
     { insert: 'name:', desc: 'Logger 名包含字符串' },
     { insert: 'message:', desc: '消息内容包含字符串' },
-    { insert: 'level:', desc: '该级别及更严重（debug/info/warn/error）' },
+    { insert: 'level:', desc: '该级别及更严重（debug/info/success/warn/error）' },
     { insert: 'age:', desc: '最近时间段（如 30s / 5m / 3h / 1d）' },
     { insert: '-name:', desc: '排除 logger 名' },
     { insert: '-message:', desc: '排除消息内容' },
     { insert: '-level:', desc: '排除该级别及更严重' },
+    { insert: '-age:', desc: '排除最近时间段' },
 ]
 
 const LEVEL_SUGGESTIONS: Suggestion[] = [
     { insert: 'debug', desc: 'DEBUG 及更严重（全部）' },
     { insert: 'info', desc: 'INFO 及更严重' },
+    { insert: 'success', desc: 'SUCCESS 及更严重' },
     { insert: 'warn', desc: 'WARN 及更严重' },
     { insert: 'error', desc: '仅 ERROR' },
 ]
@@ -243,7 +253,8 @@ export function buildSuggestions(
     names: readonly string[]
 ): Suggestion[] {
     const lastToken = /(?:^|\s)(\S*)$/u.exec(input)?.[1] ?? ''
-    if (lastToken === '') return input === '' ? KEY_SUGGESTIONS : []
+    // 刚开始一个词（含刚敲完空格）：直接给 key 表
+    if (lastToken === '') return KEY_SUGGESTIONS
     if (!lastToken.includes(':')) {
         const needle = lastToken.toLowerCase()
         return KEY_SUGGESTIONS.filter((item) =>
