@@ -1,7 +1,7 @@
 {
     "name": "koishi-plugin-logger-next",
     "description": "Dump log files for Koishi",
-    "version": "0.4.3",
+    "version": "0.4.4",
     "type": "module",
     "main": "lib/index.cjs",
     "module": "lib/index.mjs",
