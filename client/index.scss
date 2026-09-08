@@ -119,6 +119,10 @@
     border-radius: 6px;
     background: var(--k-card-bg);
     box-shadow: var(--k-card-shadow, 0 4px 12px rgba(0, 0, 0, 0.15));
+
+    /* 下拉是跟随主题的，滚动条用主题色（webkit 由 Element Plus 全局样式处理） */
+    scrollbar-width: thin;
+    scrollbar-color: var(--k-color-border) transparent;
 }
 
 /* 提高权重：Element Plus 的 `.el-button.is-link`（0,2,0）会把 padding 压回 2px */
@@ -202,6 +206,33 @@
     font-family: var(--ll-mono);
     font-size: 14px;
     line-height: 20px;
+
+    /* 面板是固定深色底，滚动条也跟着用深色（否则浅色主题下会有一条亮边） */
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 #18181b;
+
+    &::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: #18181b;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        border: 2px solid #18181b;
+        border-radius: 5px;
+        background: #3f3f46;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+    }
+
+    &::-webkit-scrollbar-corner {
+        background: #18181b;
+    }
 }
 
 /* 关闭自动换行：整行按内容宽度撑开，由容器横向滚动 */
