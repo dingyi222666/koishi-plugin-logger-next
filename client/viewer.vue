@@ -221,7 +221,7 @@ import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
 import { Bottom, Delete, Fold, Sort } from '@element-plus/icons-vue'
 import LogRow from './LogRow.vue'
 import { ansiPlain } from './ansi'
-import { buildFeed } from './feed'
+import { createFeed } from './feed'
 import { formatTime, LEVEL_META } from './format'
 import { VirtualLayout } from './virtual'
 import {
@@ -261,7 +261,8 @@ const rowKey = (entry: Logger.Record): string =>
     `${entry.timestamp}:${entry.id}`
 
 // ── 数据：store.logs → 去重 / 截断后的 feed ──────────────────
-const entries = computed(() => buildFeed(props.logs))
+const feedCache = createFeed()
+const entries = computed(() => feedCache.update(props.logs))
 
 /** 「清空视图」的本地水位：只隐藏已看到的，服务端缓冲与 store 不动。 */
 const cleared = ref<{ ts: number; id: number } | null>(null)
@@ -308,11 +309,24 @@ let prevLength = 0
 // ── 派生 ────────────────────────────────────────────────────
 const total = computed(() => visible.value.length)
 
+/** 来源计数：visible 尾部追加时增量更新（清空视图 / 重连时整份重算）。 */
+let sourceCounts = new Map<string, number>()
+let sourceInput: readonly Logger.Record[] | undefined
+let sourceProcessed = 0
+
 const sources = computed((): Array<{ name: string; count: number }> => {
-    const counts = new Map<string, number>()
-    for (const entry of visible.value)
-        counts.set(entry.name, (counts.get(entry.name) ?? 0) + 1)
-    return [...counts.entries()]
+    const list = visible.value
+    if (sourceInput !== list || list.length < sourceProcessed) {
+        sourceCounts = new Map()
+        sourceInput = list
+        sourceProcessed = 0
+    }
+    for (let i = sourceProcessed; i < list.length; i++) {
+        const name = list[i]!.name
+        sourceCounts.set(name, (sourceCounts.get(name) ?? 0) + 1)
+    }
+    sourceProcessed = list.length
+    return [...sourceCounts.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([name, count]) => ({ name, count }))
 })
@@ -538,14 +552,20 @@ const padBottom = computed(() => {
     return layout.totalHeight - layout.prefix(windowRange.value.end)
 })
 
-/** 命中序号 → rows 下标（跳转用）。 */
-const matchToRow = computed(() => {
-    const map = new Map<number, number>()
-    rows.value.forEach((row, index) => {
-        if (row.kind === 'line') map.set(row.match, index)
-    })
-    return map
-})
+/** 命中序号 → rows 下标：只在跳转时构建，rows 没变则复用。 */
+let matchIndexCache: { rows: Row[]; map: Map<number, number> } | undefined
+
+function rowIndexForMatch(match: number): number | undefined {
+    const list = rows.value
+    if (matchIndexCache === undefined || matchIndexCache.rows !== list) {
+        const map = new Map<number, number>()
+        list.forEach((row, index) => {
+            if (row.kind === 'line') map.set(row.match, index)
+        })
+        matchIndexCache = { rows: list, map }
+    }
+    return matchIndexCache.map.get(match)
+}
 
 /** 测量窗口内每行的实际高度，更新布局，并做滚动锚定。 */
 function measureRendered(): void {
@@ -705,7 +725,7 @@ function navigate(step: 1 | -1): void {
         (((cursor.value + step) % lineCount.value) + lineCount.value) %
         lineCount.value
     cursor.value = next
-    const rowIndex = matchToRow.value.get(next)
+    const rowIndex = rowIndexForMatch(next)
     const el = scrollEl.value
     if (rowIndex === undefined || el === null || el === undefined) return
     const top = layout.prefix(rowIndex)
