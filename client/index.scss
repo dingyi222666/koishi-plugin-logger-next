@@ -128,12 +128,14 @@
     justify-content: space-between;
     gap: 16px;
     width: 100%;
-    height: 32px;
+    height: auto;
+    /* 原版 logger 的 EP 下拉项：20px 行高 + 上下 6px = 32px */
     min-height: 32px;
     /* EP 的 `.el-button+.el-button` 会给相邻项加 12px 左外边距，清掉 */
     margin: 0;
-    padding: 0 12px;
+    padding: 6px 12px;
     font-size: 14px;
+    line-height: 20px;
     text-align: left;
 
     &:hover,
@@ -367,10 +369,11 @@
     }
 }
 
-/* 压过 `.el-button.is-link`：右键菜单项保持 28px 行高 */
+/* 压过 `.el-button.is-link`：右键菜单项同样 32px（原版 logger 下拉项高度） */
 .ll-menu .el-button.ll-menu-item {
-    height: 28px;
-    min-height: 28px;
+    height: auto;
+    min-height: 32px;
     margin: 0;
-    padding: 0 12px;
+    padding: 6px 12px;
+    line-height: 20px;
 }
