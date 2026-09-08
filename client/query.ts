@@ -1,8 +1,10 @@
 /**
  * Logcat 式 query 语言（developer.android.com/studio/debug/logcat）。
  *
- * `name:foo` / `message:bar` / `level:info`（该级别及更严重）/ `age:5m`；
+ * `name:foo` / `message:bar` / `level:info`（仅这些级别，可多选）/ `age:5m`；
  * `-` 否定、`key~:re` 正则、同 key 多词 OR、其余 AND、引号短语；裸词匹配消息内容。
+ * 级别是多选集合：`level:a,b` / `level:a|b` / `level:a level:b` 取并集，
+ * `level:-a` 或 `-level:a` 把该级别从结果里去掉。
  * 另含输入补全（key 左、说明右）与 query 语法高亮 token。
  */
 import { ansiPlain } from './ansi'
@@ -16,14 +18,6 @@ export interface QueryTerm {
     negated: boolean
     regex: boolean
     value: string
-}
-
-const SEVERITY: Record<LogLevel, number> = {
-    debug: 0,
-    info: 1,
-    success: 2,
-    warn: 3,
-    error: 4,
 }
 
 /** Logcat 级别词 + 缩写 → 我们的级别。 */
@@ -117,11 +111,6 @@ function termMatches(
 ): boolean {
     // 值还没输入完（如刚敲下 `name:`）：不参与过滤
     if (term.value === '') return true
-    if (term.key === 'level') {
-        const target = LEVEL_WORDS[term.value.toLowerCase()]
-        if (target === undefined) return true // 无法解析的级别：不参与过滤
-        return SEVERITY[entry.type] >= SEVERITY[target]
-    }
     if (term.key === 'age') {
         const match = term.value.match(/^(\d+)([smhd])$/u)
         if (match === null) return true
@@ -151,6 +140,8 @@ export function compileQuery(
     const positive = new Map<QueryKey, QueryTerm[]>()
     const plain: QueryTerm[] = []
     const negated: QueryTerm[] = []
+    const levelInclude = new Set<LogLevel>()
+    const levelExclude = new Set<LogLevel>()
     let invalid = false
     for (const term of terms) {
         if (term.regex) {
@@ -159,6 +150,21 @@ export function compileQuery(
             } catch {
                 invalid = true
             }
+        }
+        if (term.key === 'level') {
+            // 级别是多选集合：`level:a,b` / `level:a|b` / `level:a level:b` 取并集，
+            // `level:-a` 或 `-level:a` 把该级别从结果里去掉。
+            for (const raw of term.value.split(/[,|]/u)) {
+                const item = raw.trim()
+                if (item === '') continue
+                const negatedValue = item.startsWith('-')
+                const exclude = term.negated || negatedValue
+                const word = negatedValue ? item.slice(1) : item
+                const level = LEVEL_WORDS[word.toLowerCase()]
+                if (level === undefined) continue
+                ;(exclude ? levelExclude : levelInclude).add(level)
+            }
+            continue
         }
         if (term.key === 'text') {
             if (!term.negated) plain.push(term)
@@ -175,12 +181,7 @@ export function compileQuery(
     const highlightParts = [...positive.values()]
         .flat()
         .concat(plain)
-        .filter(
-            (term) =>
-                term.value !== '' &&
-                term.key !== 'level' &&
-                term.key !== 'age'
-        )
+        .filter((term) => term.value !== '' && term.key !== 'age')
         .map((term) => (term.regex ? term.value : escapeRegExp(term.value)))
     let highlight: RegExp | undefined
     if (highlightParts.length > 0) {
@@ -197,6 +198,10 @@ export function compileQuery(
         invalid,
         highlight,
         matches(entry: Logger.Record): boolean {
+            // 级别：正向是「仅这些级别」（多选并集），负向是逐个排除
+            if (levelInclude.size > 0 && !levelInclude.has(entry.type))
+                return false
+            if (levelExclude.has(entry.type)) return false
             if (
                 negated.some((term) =>
                     termMatches(term, entry, now, caseSensitive)
@@ -223,7 +228,7 @@ export function compileQuery(
 // ── query 补全（Logcat：key 左、说明右）─────────────────────
 
 export interface Suggestion {
-    /** 接受后替换输入框最后一个词的内容。 */
+    /** 接受后只补全当前正在输入的片段（key 或某个值），不会覆盖前面的内容。 */
     insert: string
     desc: string
 }
@@ -231,21 +236,32 @@ export interface Suggestion {
 const KEY_SUGGESTIONS: Suggestion[] = [
     { insert: 'name:', desc: 'Logger 名包含字符串' },
     { insert: 'message:', desc: '消息内容包含字符串' },
-    { insert: 'level:', desc: '该级别及更严重（debug/info/success/warn/error）' },
+    { insert: 'level:', desc: '仅显示这些级别，可多选（success,debug）' },
     { insert: 'age:', desc: '最近时间段（如 30s / 5m / 3h / 1d）' },
     { insert: '-name:', desc: '排除 logger 名' },
     { insert: '-message:', desc: '排除消息内容' },
-    { insert: '-level:', desc: '排除该级别及更严重' },
+    { insert: '-level:', desc: '排除这些级别，可多选（success,debug）' },
     { insert: '-age:', desc: '排除最近时间段' },
 ]
 
 const LEVEL_SUGGESTIONS: Suggestion[] = [
-    { insert: 'debug', desc: 'DEBUG 及更严重（全部）' },
-    { insert: 'info', desc: 'INFO 及更严重' },
-    { insert: 'success', desc: 'SUCCESS 及更严重' },
-    { insert: 'warn', desc: 'WARN 及更严重' },
-    { insert: 'error', desc: '仅 ERROR' },
+    { insert: 'debug', desc: '仅 DEBUG（不含其他级别）' },
+    { insert: 'info', desc: '仅 INFO（不含其他级别）' },
+    { insert: 'success', desc: '仅 SUCCESS（不含其他级别）' },
+    { insert: 'warn', desc: '仅 WARN（不含其他级别）' },
+    { insert: 'error', desc: '仅 ERROR（不含其他级别）' },
 ]
+
+/** 最后一个词拆成「前缀（key: 与已有取值分隔符、`-`）」「正在输入的片段」。 */
+const VALUE_FRAGMENT = /^(.*[:|,])(-?)([^:|,]*)$/u
+
+function splitValueFragment(
+    token: string
+): { prefix: string; typed: string } | null {
+    const match = VALUE_FRAGMENT.exec(token)
+    if (match === null) return null
+    return { prefix: `${match[1]!}${match[2]!}`, typed: match[3]! }
+}
 
 /** 依据输入的最后一个词给出补全（key 前缀 → key 表；key:值 → 值表）。 */
 export function buildSuggestions(
@@ -264,17 +280,25 @@ export function buildSuggestions(
     const match = lastToken.match(/^(-?)([a-zA-Z]+)(~?):(.*)$/u)
     if (match === null) return []
     const key = normalizeKey(match[2]!)
-    const prefix = `${match[1]}${match[2]}${match[3]}:`
-    const typed = match[4]!.toLowerCase()
+    const fragment = splitValueFragment(lastToken)
+    const typed = (fragment?.typed ?? match[4]!).toLowerCase()
     if (key === 'name') {
         return names
             .filter((name) => name.toLowerCase().includes(typed))
             .slice(0, 8)
-            .map((name) => ({ insert: `${prefix}${name} `, desc: name }))
+            .map((name) => ({ insert: `${name} `, desc: name }))
     }
     if (key === 'level') {
-        return LEVEL_SUGGESTIONS.filter((item) =>
-            item.insert.startsWith(typed)
+        // 已选中的级别不再出现在补全里，避免 `level:success,success`
+        const chosen = new Set(
+            (fragment?.prefix ?? '')
+                .replace(/^-?[a-zA-Z]+~?:/u, '')
+                .split(/[,|]/u)
+                .map((item) => item.replace(/^-/u, '').toLowerCase())
+                .filter((item) => item !== '')
+        )
+        return LEVEL_SUGGESTIONS.filter(
+            (item) => item.insert.startsWith(typed) && !chosen.has(item.insert)
         )
     }
     return []
@@ -286,7 +310,13 @@ export function applySuggestion(
 ): string {
     const lastToken = /(?:^|\s)(\S*)$/u.exec(input)?.[1] ?? ''
     const head = input.slice(0, input.length - lastToken.length)
-    return `${head}${suggestion.insert}`
+    const fragment = lastToken.includes(':')
+        ? splitValueFragment(lastToken)
+        : null
+    // key 补全：整个词就是正在输入的 key，直接替换；
+    // 值补全：只替换最后一个分隔符之后的片段，保留 key 与已选值（Tab / Enter 都是补全）。
+    if (fragment === null) return `${head}${suggestion.insert}`
+    return `${head}${fragment.prefix}${suggestion.insert}`
 }
 
 // ── query 语法高亮（Logcat 查询栏同款观感）─────────────────
