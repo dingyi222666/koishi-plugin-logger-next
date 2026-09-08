@@ -116,7 +116,12 @@
 
     <!-- 控制台：全宽铺满 -->
     <div class="ll-body">
-      <div ref="scrollEl" class="ll-console" @scroll="onScroll">
+      <div
+        ref="scrollEl"
+        class="ll-console"
+        :class="{ 'is-nowrap': !wrap }"
+        @scroll="onScroll"
+      >
         <p v-if="!loaded" class="ll-empty">正在加载日志缓冲…</p>
         <p v-else-if="viewItems.length === 0" class="ll-empty">
           {{

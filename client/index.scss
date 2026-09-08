@@ -195,12 +195,24 @@
     position: absolute;
     inset: 0;
     padding: 4px 0;
-    overflow-y: auto;
+    /* 非自动换行时要能横向滚动 */
+    overflow: auto;
     background: #18181b;
     color: #e4e4e7;
     font-family: var(--ll-mono);
     font-size: 14px;
     line-height: 20px;
+}
+
+/* 关闭自动换行：整行按内容宽度撑开，由容器横向滚动 */
+.ll-console.is-nowrap .ll-row {
+    width: max-content;
+    min-width: 100%;
+}
+
+.ll-console.is-nowrap .ll-content {
+    flex: 0 0 auto;
+    min-width: max-content;
 }
 
 .ll-empty {
@@ -254,10 +266,8 @@
 
 .ll-name {
     flex-shrink: 0;
-    width: 7rem;
     font-weight: 600;
-    white-space: normal;
-    word-break: break-all;
+    white-space: nowrap;
 }
 
 .ll-content {
