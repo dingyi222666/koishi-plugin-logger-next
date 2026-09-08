@@ -2,32 +2,46 @@
   <div class="ll-root">
     <!-- 过滤栏：来源 + Logcat 式 query（语法高亮 + 补全）+ 折叠 + 动作 -->
     <div class="ll-toolbar">
-      <select
+      <el-select
         v-model="source"
         class="ll-source"
-        title="按 logger 名过滤"
-        @change="withFilterReset()"
+        placeholder="全部来源"
+        @change="withFilterReset"
       >
-        <option value="">全部来源（{{ total }}）</option>
-        <option v-for="item in sources" :key="item.name" :value="item.name">
-          {{ item.name }}（{{ item.count }}）
-        </option>
-      </select>
+        <el-option :value="''" :label="`全部来源（${total}）`" />
+        <el-option
+          v-for="item in sources"
+          :key="item.name"
+          :value="item.name"
+          :label="`${item.name}（${item.count}）`"
+        />
+      </el-select>
 
       <div class="ll-query-wrap">
-        <input
-          ref="queryEl"
+        <el-input
           v-model="query"
-          class="ll-query-input"
+          class="ll-query"
           :class="{ 'is-invalid': queryFilter.invalid }"
           placeholder="过滤：name:foo level:info -message:bar age:5m"
           spellcheck="false"
-          autocomplete="off"
           @input="onQueryInput"
           @focus="onQueryFocus"
           @blur="suggestOpen = false"
           @keydown="onQueryKeydown"
-        />
+        >
+          <template #suffix>
+            <el-button
+              link
+              class="ll-aa"
+              :type="caseSensitive ? 'primary' : 'info'"
+              title="区分大小写"
+              @mousedown.prevent
+              @click="toggleCase"
+            >
+              Aa
+            </el-button>
+          </template>
+        </el-input>
         <!-- 文字透明 + 覆盖层上色：query 语法高亮 -->
         <div class="ll-query-overlay" aria-hidden="true">
           <span
@@ -37,104 +51,66 @@
             >{{ token.text }}</span
           >
         </div>
-        <button
-          type="button"
-          class="ll-aa"
-          :class="{ 'is-active': caseSensitive }"
-          title="区分大小写"
-          @mousedown.prevent
-          @click="toggleCase"
-        >
-          Aa
-        </button>
         <div
           v-if="suggestOpen && suggestions.length > 0"
           class="ll-suggest"
           @mousedown.prevent
         >
-          <button
+          <el-button
             v-for="(item, index) in suggestions"
             :key="`${item.insert}:${index}`"
-            type="button"
+            link
             class="ll-suggest-item"
             :class="{ 'is-active': index === suggestIndex }"
             @click="acceptSuggestion(item)"
           >
             <span class="ll-suggest-key">{{ item.insert }}</span>
             <span class="ll-suggest-desc">{{ item.desc }}</span>
-          </button>
+          </el-button>
         </div>
       </div>
 
-      <input
+      <el-input
         v-if="foldEnabled"
         v-model="foldText"
         class="ll-fold-input"
         :class="{ 'is-invalid': invalidFold && foldPattern === undefined }"
         placeholder="折叠包含…的行（正则）"
         spellcheck="false"
-        autocomplete="off"
-        @input="withFilterReset()"
+        @input="withFilterReset"
       />
 
-      <div class="ll-chips">
-        <button
-          v-for="level in LEVEL_ORDER"
-          :key="level"
-          type="button"
-          class="ll-chip"
-          :class="[`is-${level}`, { 'is-on': levels[level] }]"
-          :title="`${level} 级别`"
-          @click="toggleLevel(level)"
-        >
-          {{ LEVEL_META[level].letter }}
-        </button>
-      </div>
-
       <div class="ll-actions">
-        <button
-          type="button"
-          class="ll-icon-btn"
-          :class="{ 'is-active': foldEnabled }"
-          title="折叠包含某模式的行"
-          @click="toggleFoldEnabled"
+        <el-tooltip content="折叠包含某模式的行" placement="bottom">
+          <el-button
+            text
+            :type="foldEnabled ? 'primary' : 'info'"
+            :icon="Fold"
+            @click="toggleFoldEnabled"
+          />
+        </el-tooltip>
+        <el-tooltip
+          :content="follow ? '已跟随最新' : '滚动到最新并跟随'"
+          placement="bottom"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="ll-icon-btn"
-          :class="{ 'is-active': follow }"
-          :title="follow ? '已跟随最新' : '滚动到最新并跟随'"
-          @click="scrollToEnd"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 5v13M6 12l6 6 6-6" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="ll-icon-btn"
-          :class="{ 'is-active': wrap }"
-          title="自动换行"
-          @click="wrap = !wrap"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 6h16M4 12h12a3 3 0 1 1 0 6h-2M4 18h6M9 15l-3 3 3 3" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="ll-icon-btn"
-          title="清空视图（服务端缓冲不动）"
-          @click="clearView"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
-          </svg>
-        </button>
+          <el-button
+            text
+            :type="follow ? 'primary' : 'info'"
+            :icon="Bottom"
+            @click="scrollToEnd"
+          />
+        </el-tooltip>
+        <el-tooltip content="自动换行" placement="bottom">
+          <el-button
+            text
+            :type="wrap ? 'primary' : 'info'"
+            :icon="Sort"
+            @click="wrap = !wrap"
+          />
+        </el-tooltip>
+        <el-tooltip content="清空视图（服务端缓冲不动）" placement="bottom">
+          <el-button text type="info" :icon="Delete" @click="clearView" />
+        </el-tooltip>
       </div>
     </div>
 
@@ -164,8 +140,8 @@
               />
             </template>
             <template v-else>
-              <button
-                type="button"
+              <el-button
+                link
                 class="ll-fold"
                 @click="toggleFold(item.key)"
               >
@@ -180,7 +156,7 @@
                   {{ formatTime(item.items[0]!.timestamp) }} ·
                   {{ item.items[0]!.name }}，点击展开）</span
                 >
-              </button>
+              </el-button>
               <LogRow
                 v-for="line in item.lines"
                 :key="line.key"
@@ -199,17 +175,16 @@
           </template>
         </template>
       </div>
-      <button
+      <el-button
         v-if="!follow"
-        type="button"
+        type="primary"
+        round
         class="ll-float"
+        :icon="Bottom"
         @click="scrollToEnd"
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 5v13M6 12l6 6 6-6" />
-        </svg>
         {{ newCount > 0 ? `${newCount} 条新日志` : '滚动到底部' }}
-      </button>
+      </el-button>
     </div>
 
     <!-- 行右键菜单 -->
@@ -220,17 +195,17 @@
       @mousedown.stop
       @contextmenu.prevent
     >
-      <button
+      <el-button
         v-for="item in menuItems"
         :key="item.label"
-        type="button"
+        link
         class="ll-menu-item"
         :class="{ 'is-disabled': item.disabled }"
         :disabled="item.disabled"
         @click="runMenu(item)"
       >
         {{ item.label }}
-      </button>
+      </el-button>
     </div>
   </div>
 </template>
@@ -238,10 +213,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Logger } from 'koishi'
+import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
+import { Bottom, Delete, Fold, Sort } from '@element-plus/icons-vue'
 import LogRow from './LogRow.vue'
 import { ansiPlain } from './ansi'
 import { buildFeed } from './feed'
-import { formatTime, LEVEL_META, LEVEL_ORDER } from './format'
+import { formatTime, LEVEL_META } from './format'
 import {
     applySuggestion,
     buildSuggestions,
@@ -257,8 +234,6 @@ const props = withDefaults(
     }>(),
     { loaded: true }
 )
-
-type LogLevel = Logger.Type
 
 interface LineItem {
     kind: 'line'
@@ -299,13 +274,6 @@ const visible = computed(() => {
 const source = ref('')
 const query = ref('level:info')
 const caseSensitive = ref(false)
-const levels = ref<Record<LogLevel, boolean>>({
-    error: true,
-    warn: true,
-    success: true,
-    info: true,
-    debug: false,
-})
 const wrap = ref(true)
 
 const foldEnabled = ref(false)
@@ -325,7 +293,6 @@ const suggestOpen = ref(false)
 const suggestIndex = ref(0)
 
 const scrollEl = ref<HTMLElement>()
-const queryEl = ref<HTMLInputElement>()
 
 const follow = ref(true)
 const newCount = ref(0)
@@ -357,9 +324,7 @@ const suggestions = computed(() =>
     )
 )
 
-const invalidFold = computed(
-    () => foldEnabled.value && foldText.value !== ''
-)
+const invalidFold = computed(() => foldEnabled.value && foldText.value !== '')
 
 const foldPattern = computed((): RegExp | undefined => {
     if (!foldEnabled.value || foldText.value === '') return undefined
@@ -373,48 +338,58 @@ const foldPattern = computed((): RegExp | undefined => {
 const filtered = computed(() =>
     visible.value.filter(
         (entry) =>
-            levels.value[entry.type] &&
             (source.value === '' || entry.name === source.value) &&
             queryFilter.value.matches(entry)
     )
 )
 
 /** 折叠分组（Fold Lines Like This）：连续命中折叠 pattern 的 ≥2 行折成一组。 */
-const display = computed((): Array<Omit<LineItem, 'match'> | Omit<FoldItem, 'expanded' | 'lines'>> => {
-    const pattern = foldPattern.value
-    if (pattern === undefined) {
-        return filtered.value.map((entry) => ({
-            kind: 'line' as const,
-            key: rowKey(entry),
-            entry,
-        }))
-    }
-    const items: Array<Omit<LineItem, 'match'> | Omit<FoldItem, 'expanded' | 'lines'>> = []
-    let group: Logger.Record[] = []
-    const flush = (): void => {
-        if (group.length === 0) return
-        if (group.length === 1) {
-            items.push({ kind: 'line', key: rowKey(group[0]!), entry: group[0]! })
-        } else {
-            items.push({
-                kind: 'fold',
-                key: `fold:${rowKey(group[0]!)}`,
-                items: group,
-            })
+const display = computed(
+    (): Array<Omit<LineItem, 'match'> | Omit<FoldItem, 'expanded' | 'lines'>> => {
+        const pattern = foldPattern.value
+        if (pattern === undefined) {
+            return filtered.value.map((entry) => ({
+                kind: 'line' as const,
+                key: rowKey(entry),
+                entry,
+            }))
         }
-        group = []
-    }
-    for (const entry of filtered.value) {
-        if (pattern.test(ansiPlain(entry.content)) || pattern.test(entry.name)) {
-            group.push(entry)
-            continue
+        const items: Array<
+            Omit<LineItem, 'match'> | Omit<FoldItem, 'expanded' | 'lines'>
+        > = []
+        let group: Logger.Record[] = []
+        const flush = (): void => {
+            if (group.length === 0) return
+            if (group.length === 1) {
+                items.push({
+                    kind: 'line',
+                    key: rowKey(group[0]!),
+                    entry: group[0]!,
+                })
+            } else {
+                items.push({
+                    kind: 'fold',
+                    key: `fold:${rowKey(group[0]!)}`,
+                    items: group,
+                })
+            }
+            group = []
+        }
+        for (const entry of filtered.value) {
+            if (
+                pattern.test(ansiPlain(entry.content)) ||
+                pattern.test(entry.name)
+            ) {
+                group.push(entry)
+                continue
+            }
+            flush()
+            items.push({ kind: 'line', key: rowKey(entry), entry })
         }
         flush()
-        items.push({ kind: 'line', key: rowKey(entry), entry })
+        return items
     }
-    flush()
-    return items
-})
+)
 
 /** 渲染列表：分配命中导航用的序号（收起的折叠组不可跳转）。 */
 const viewItems = computed((): ViewItem[] => {
@@ -442,7 +417,8 @@ const viewItems = computed((): ViewItem[] => {
 /** 渲染出来的可跳转行数。 */
 const lineCount = computed(() =>
     viewItems.value.reduce(
-        (total, item) => total + (item.kind === 'line' ? 1 : item.lines.length),
+        (total, item) =>
+            total + (item.kind === 'line' ? 1 : item.lines.length),
         0
     )
 )
@@ -450,7 +426,9 @@ const lineCount = computed(() =>
 /** 渲染中的行（展开的折叠组展开计算），范围选择 / 菜单拷贝按这个顺序。 */
 const lineEntries = computed(() =>
     viewItems.value.flatMap((item) =>
-        item.kind === 'line' ? [item.entry] : item.lines.map((line) => line.entry)
+        item.kind === 'line'
+            ? [item.entry]
+            : item.lines.map((line) => line.entry)
     )
 )
 
@@ -478,7 +456,9 @@ const menuItems = computed((): MenuItem[] => {
             label: 'Copy content',
             disabled: !hasRows,
             action: () =>
-                copy(selected.map((entry) => ansiPlain(entry.content)).join('\n')),
+                copy(
+                    selected.map((entry) => ansiPlain(entry.content)).join('\n')
+                ),
         },
         {
             label: 'Copy',
@@ -568,11 +548,6 @@ function withFilterReset(): void {
 function toggleCase(): void {
     withFilterReset()
     caseSensitive.value = !caseSensitive.value
-}
-
-function toggleLevel(level: LogLevel): void {
-    withFilterReset()
-    levels.value = { ...levels.value, [level]: !levels.value[level] }
 }
 
 function toggleFoldEnabled(): void {

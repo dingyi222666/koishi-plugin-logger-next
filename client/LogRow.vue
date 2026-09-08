@@ -6,12 +6,7 @@
       entry.name
     }}</span>
     <span class="ll-content" :class="{ 'is-wrap': wrap }">
-      <AnsiRun
-        v-for="(run, index) in runs"
-        :key="index"
-        :run="run"
-        :pattern="pattern"
-      />
+      <AnsiText :content="entry.content" :pattern="pattern" />
     </span>
   </div>
 </template>
@@ -19,8 +14,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Logger } from 'koishi'
-import AnsiRun from './AnsiRun.vue'
-import { parseAnsi } from './ansi'
+import AnsiText from './AnsiText.vue'
 import { formatTime, LEVEL_META, nameColor } from './format'
 
 const props = defineProps<{
@@ -33,7 +27,6 @@ const props = defineProps<{
 
 const meta = computed(() => LEVEL_META[props.entry.type] ?? LEVEL_META.info)
 const time = computed(() => formatTime(props.entry.timestamp))
-const runs = computed(() => parseAnsi(props.entry.content))
 const rowClass = computed(() => ({
     'is-error': props.entry.type === 'error',
     'is-warn': props.entry.type === 'warn',

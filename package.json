@@ -54,9 +54,11 @@
         }
     },
     "devDependencies": {
+        "@element-plus/icons-vue": "^2.3.1",
         "@koishijs/client": "^5.30.11",
         "@koishijs/plugin-console": "^5.30.10",
         "ansi_up": "^5.2.1",
+        "element-plus": "^2.7.7",
         "esbuild": "^0.25.10",
         "esbuild-register": "npm:@shigma/esbuild-register@^1.1.1",
         "koishi": "^4.18.9",

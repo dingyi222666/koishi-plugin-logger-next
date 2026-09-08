@@ -55,7 +55,7 @@ function renderLine(record: Logger.Record)
   }
 
   .line {
-    line-height: 1.5;
+    line-height: 20px;
     white-space: pre-wrap;
     word-break: break-all;
   }

@@ -18,7 +18,8 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    font-size: 12px;
+    /* 与官方 logger 的日志行一致：14px / 20px */
+    font-size: 14px;
     color: var(--k-text-normal);
 }
 
@@ -34,55 +35,32 @@
 }
 
 .ll-source {
-    height: 28px;
-    min-width: 180px;
-    max-width: 240px;
-    padding: 0 6px;
-    border: 1px solid var(--k-color-border);
-    border-radius: 6px;
-    background: var(--k-card-bg);
-    color: var(--k-text-normal);
-    font-size: 12px;
-    outline: none;
-
-    &:focus {
-        border-color: var(--k-color-primary);
-    }
+    width: 220px;
+    flex-shrink: 0;
 }
 
 .ll-query-wrap {
     position: relative;
-    display: flex;
     flex: 1 1 260px;
-    align-items: center;
     min-width: 220px;
-    height: 28px;
 }
 
-.ll-query-input {
+.ll-query {
     width: 100%;
-    height: 100%;
-    padding: 0 34px 0 10px;
-    border: 1px solid var(--k-color-border);
-    border-radius: 6px;
-    background: var(--k-card-bg);
+}
+
+.ll-query .el-input__inner {
     color: transparent;
     caret-color: var(--k-text-normal);
     font-family: var(--ll-mono);
-    font-size: 12px;
-    outline: none;
+}
 
-    &::placeholder {
-        color: var(--k-text-light);
-    }
+.ll-query .el-input__inner::placeholder {
+    color: var(--k-text-light);
+}
 
-    &:focus {
-        border-color: var(--k-color-primary);
-    }
-
-    &.is-invalid {
-        border-color: var(--k-color-danger);
-    }
+.ll-query.is-invalid .el-input__wrapper {
+    box-shadow: 0 0 0 1px var(--k-color-danger) inset;
 }
 
 .ll-query-overlay {
@@ -90,12 +68,12 @@
     inset: 0;
     display: flex;
     align-items: center;
-    padding: 0 34px 0 10px;
+    padding: 0 44px 0 11px;
     overflow: hidden;
     white-space: pre;
     pointer-events: none;
     font-family: var(--ll-mono);
-    font-size: 12px;
+    font-size: 14px;
     color: var(--k-text-normal);
 }
 
@@ -116,31 +94,9 @@
 }
 
 .ll-aa {
-    position: absolute;
-    top: 50%;
-    right: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--k-text-light);
-    font: 600 11px var(--ll-mono);
-    cursor: pointer;
-    transform: translateY(-50%);
-
-    &:hover {
-        color: var(--k-text-normal);
-        background: var(--k-hover-bg);
-    }
-
-    &.is-active {
-        background: var(--k-color-primary);
-        color: #fff;
-    }
+    padding: 0;
+    height: auto;
+    font: 600 12px var(--ll-mono);
 }
 
 .ll-suggest {
@@ -165,13 +121,10 @@
     justify-content: space-between;
     gap: 16px;
     width: 100%;
+    height: auto;
     padding: 2px 12px;
-    border: none;
-    background: transparent;
-    color: var(--k-text-normal);
-    font-size: 12px;
+    font-size: 14px;
     text-align: left;
-    cursor: pointer;
 
     &:hover,
     &.is-active {
@@ -190,70 +143,14 @@
 
 .ll-fold-input {
     width: 220px;
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--k-color-border);
-    border-radius: 6px;
-    background: var(--k-card-bg);
-    color: var(--k-text-normal);
+}
+
+.ll-fold-input .el-input__inner {
     font-family: var(--ll-mono);
-    font-size: 12px;
-    outline: none;
-
-    &:focus {
-        border-color: var(--k-color-primary);
-    }
-
-    &.is-invalid {
-        border-color: var(--k-color-danger);
-    }
 }
 
-.ll-chips {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.ll-chip {
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--k-color-border);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--k-text-light);
-    font: 700 11px var(--ll-mono);
-    cursor: pointer;
-    opacity: 0.55;
-
-    &.is-on {
-        opacity: 1;
-    }
-
-    &.is-error.is-on {
-        border-color: #f14c4c;
-        color: #f14c4c;
-    }
-
-    &.is-warn.is-on {
-        border-color: #f5f543;
-        color: #f5f543;
-    }
-
-    &.is-success.is-on {
-        border-color: #23d18b;
-        color: #23d18b;
-    }
-
-    &.is-info.is-on {
-        border-color: #29b8db;
-        color: #29b8db;
-    }
-
-    &.is-debug.is-on {
-        border-color: #a1a1aa;
-        color: #a1a1aa;
-    }
+.ll-fold-input.is-invalid .el-input__wrapper {
+    box-shadow: 0 0 0 1px var(--k-color-danger) inset;
 }
 
 .ll-actions {
@@ -261,39 +158,6 @@
     align-items: center;
     gap: 4px;
     margin-left: auto;
-}
-
-.ll-icon-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: none;
-    border-radius: 5px;
-    background: transparent;
-    color: var(--k-text-light);
-    cursor: pointer;
-
-    &:hover {
-        color: var(--k-text-normal);
-        background: var(--k-hover-bg);
-    }
-
-    &.is-active {
-        color: var(--k-color-primary);
-        background: var(--k-hover-bg);
-    }
-
-    svg {
-        width: 16px;
-        height: 16px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
 }
 
 /* ── 控制台 ─────────────────────────────────────────────── */
@@ -311,7 +175,7 @@
     background: #18181b;
     color: #e4e4e7;
     font-family: var(--ll-mono);
-    font-size: 12px;
+    font-size: 14px;
     line-height: 20px;
 }
 
@@ -365,7 +229,7 @@
 
 .ll-name {
     flex-shrink: 0;
-    width: 96px;
+    width: 7rem;
     font-weight: 600;
     white-space: normal;
     word-break: break-all;
@@ -382,6 +246,10 @@
     }
 }
 
+.ll-ansi {
+    white-space: inherit;
+}
+
 .ll-hit {
     padding: 0 1px;
     border-radius: 2px;
@@ -392,18 +260,17 @@
 .ll-fold {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 8px;
     width: 100%;
+    height: auto;
     padding: 0 8px;
-    border: none;
     border-radius: 4px;
-    background: transparent;
     color: #a1a1aa;
     font-family: var(--ll-mono);
-    font-size: 12px;
+    font-size: 14px;
     line-height: 20px;
     text-align: left;
-    cursor: pointer;
 
     &:hover {
         background: rgba(255, 255, 255, 0.05);
@@ -420,27 +287,7 @@
     position: absolute;
     right: 16px;
     bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border: none;
-    border-radius: 999px;
-    background: var(--k-color-primary);
-    color: #fff;
-    font-size: 12px;
-    cursor: pointer;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-
-    svg {
-        width: 14px;
-        height: 14px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
 }
 
 /* ── 右键菜单 ───────────────────────────────────────────── */
@@ -453,25 +300,22 @@
     border-radius: 6px;
     background: var(--k-card-bg);
     box-shadow: var(--k-card-shadow, 0 6px 18px rgba(0, 0, 0, 0.2));
-    font-size: 12px;
 }
 
 .ll-menu-item {
-    display: block;
+    display: flex;
+    justify-content: flex-start;
     width: 100%;
+    height: auto;
     padding: 4px 12px;
-    border: none;
-    background: transparent;
-    color: var(--k-text-normal);
+    font-size: 14px;
     text-align: left;
-    cursor: pointer;
 
     &:hover {
         background: var(--k-hover-bg);
     }
 
     &.is-disabled {
-        color: var(--k-text-light);
         opacity: 0.5;
         pointer-events: none;
     }
