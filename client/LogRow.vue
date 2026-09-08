@@ -1,12 +1,16 @@
 <template>
   <div class="ll-row" :class="rowClass">
     <span class="ll-time">{{ time }}</span>
-    <span class="ll-level" :style="{ color: meta.color }">{{ meta.letter }}</span>
-    <span class="ll-name" :style="{ color: nameColor(entry.name) }">{{
-      entry.name
-    }}</span>
-    <span class="ll-content" :class="{ 'is-wrap': wrap }">
-      <AnsiText :content="entry.content" :pattern="pattern" />
+    <span class="ll-main">
+      <span class="ll-level" :style="{ color: meta.color }">{{
+        meta.letter
+      }}</span>
+      <span class="ll-name" :style="{ color: nameColor(entry.name) }">{{
+        entry.name
+      }}</span>
+      <span class="ll-content" :class="{ 'is-wrap': wrap }">
+        <AnsiText :content="entry.content" :pattern="pattern" />
+      </span>
     </span>
     <!-- 原版 logger 同款：跳到产生这条日志的插件 -->
     <router-link
