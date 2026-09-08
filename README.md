@@ -6,17 +6,14 @@
 
 - **日志落盘**：`data/logs/YYYY-MM-DD-N.log`（JSON Lines，按大小 / 天数轮转清理）
 - **控制台「日志」页**：实时增量 + 历史回补，按 `boot`/`id` 去重
-- **Logcat 式过滤 query**：`name:` / `message:` / `level:` / `age:`，`-` 否定、
-  `key~:` 正则、引号短语，同 key OR / 跨 key AND，裸词匹配消息内容
+- **过滤 query**：`name:` / `message:` / `level:` / `age:`，`-` 否定、`key~:` 正则、
+  引号短语，同 key OR / 跨 key AND，裸词匹配消息内容
 - **级别多选**：`level:success,debug` / `level:success|debug` /
   `level:success level:debug` 取并集，`level:-success` 排除
-- **输入即出的补全**：Ctrl+Space 打开，↑↓ 选择，Enter / Tab 都是补全（只补当前片段）
-- **ANSI SGR 解析渲染**：`ansi_up` 转义后渲染，无 XSS 面
-- **来源筛选、大小写开关、折叠相同模式的行**
-- **虚拟滚动**：只渲染视口内的行（可变行高），几十万条日志也不卡
-- **JetBrains 控制台式滚动**：贴底跟随、上翻停靠、新日志计数、一键回底
-- **命中导航**：Enter / Shift+Enter 在命中行间跳转
-- **多选复制**：Cmd/Ctrl+点击多选、Shift+范围选、右键菜单复制
+- **补全**：Ctrl+Space 打开，↑↓ 选择，Enter / Tab 补全
+- **虚拟滚动**：只渲染视口内的行，几十万条也不卡
+- **跟随滚动**：贴底跟随、上翻停靠、新日志计数、一键回底
+- **其他**：来源筛选、大小写开关、折叠相同行、命中跳转、多选复制、ANSI 着色
 
 ## 配置
 
@@ -33,5 +30,4 @@
 yarn build   # tsc + esbuild（lib/）+ vite（client/ → dist/）
 ```
 
-- 服务端（`src/`）：Koishi 插件，`Logger.targets` 落盘 + `DataService<Logger.Record[]>('logs')`
-- 客户端（`client/`）：Vue 3 + `@koishijs/client`，`/logs` 页读取 `store.logs`
+服务端在 `src/`，客户端在 `client/`。
