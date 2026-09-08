@@ -1,4 +1,4 @@
-# koishi-plugin-logger-logs
+# koishi-plugin-logger-next
 
 把 Koishi 运行日志写入本地文件，并在控制台提供全屏日志查看器。
 
@@ -8,9 +8,11 @@
 - **控制台「日志」页**：实时增量 + 历史回补，按 `boot`/`id` 去重
 - **Logcat 式过滤 query**：`name:` / `message:` / `level:` / `age:`，`-` 否定、
   `key~:` 正则、引号短语，同 key OR / 跨 key AND，裸词匹配消息内容
-- **输入即出的补全**：Ctrl+Space 打开，↑↓ 选择，Enter / Tab 接受
-- **ANSI SGR 解析渲染**：自研解析器，不 `innerHTML`、无 XSS 面
-- **级别 chips、来源筛选、大小写开关、折叠相同模式的行**
+- **级别多选**：`level:success,debug` / `level:success|debug` /
+  `level:success level:debug` 取并集，`level:-success` 排除
+- **输入即出的补全**：Ctrl+Space 打开，↑↓ 选择，Enter / Tab 都是补全（只补当前片段）
+- **ANSI SGR 解析渲染**：`ansi_up` 转义后渲染，无 XSS 面
+- **来源筛选、大小写开关、折叠相同模式的行**
 - **JetBrains 控制台式滚动**：贴底跟随、上翻停靠、新日志计数、一键回底
 - **命中导航**：Enter / Shift+Enter 在命中行间跳转
 - **多选复制**：Cmd/Ctrl+点击多选、Shift+范围选、右键菜单复制

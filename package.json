@@ -1,5 +1,5 @@
 {
-    "name": "koishi-plugin-logger-logs",
+    "name": "koishi-plugin-logger-next",
     "description": "Dump log files for Koishi",
     "version": "0.4.1",
     "type": "module",

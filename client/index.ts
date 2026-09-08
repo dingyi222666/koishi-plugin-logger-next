@@ -1,5 +1,5 @@
 import { Context } from '@koishijs/client'
-import type {} from 'koishi-plugin-logger-logs'
+import type {} from 'koishi-plugin-logger-next'
 import Logs from './index.vue'
 import Settings from './settings.vue'
 import './index.scss'
