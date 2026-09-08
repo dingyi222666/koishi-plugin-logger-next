@@ -641,7 +641,7 @@ const menuItems = computed((): MenuItem[] => {
     const hasRows = selected.length > 0
     return [
         {
-            label: 'Copy content',
+            label: '复制内容',
             disabled: !hasRows,
             action: () =>
                 copy(
@@ -649,12 +649,12 @@ const menuItems = computed((): MenuItem[] => {
                 ),
         },
         {
-            label: 'Copy',
+            label: '复制选中文本',
             disabled: (menu.value?.selectionText ?? '') === '',
             action: () => copy(menu.value?.selectionText ?? ''),
         },
         {
-            label: 'Copy select line',
+            label: '复制整行',
             disabled: !hasRows,
             action: () =>
                 copy(
@@ -669,7 +669,7 @@ const menuItems = computed((): MenuItem[] => {
                 ),
         },
         {
-            label: 'Clear',
+            label: '清空视图',
             disabled: false,
             action: () => clearView(),
         },
