@@ -231,8 +231,8 @@ export interface Suggestion {
 const KEY_SUGGESTIONS: Suggestion[] = [
     { insert: 'name:', desc: 'Logger 名包含字符串' },
     { insert: 'message:', desc: '消息内容包含字符串' },
-    { insert: 'level:', desc: '该级别及更严重（debug/info/success/warn/error）' },
-    { insert: 'age:', desc: '最近时间段（如 30s / 5m / 3h / 1d）' },
+    { insert: 'level:', desc: '该级别及更严重' },
+    { insert: 'age:', desc: '最近时间段，如 30s / 5m / 3h / 1d' },
     { insert: '-name:', desc: '排除 logger 名' },
     { insert: '-message:', desc: '排除消息内容' },
     { insert: '-level:', desc: '排除该级别及更严重' },
@@ -240,7 +240,7 @@ const KEY_SUGGESTIONS: Suggestion[] = [
 ]
 
 const LEVEL_SUGGESTIONS: Suggestion[] = [
-    { insert: 'debug', desc: 'DEBUG 及更严重（全部）' },
+    { insert: 'debug', desc: 'DEBUG 及更严重' },
     { insert: 'info', desc: 'INFO 及更严重' },
     { insert: 'success', desc: 'SUCCESS 及更严重' },
     { insert: 'warn', desc: 'WARN 及更严重' },

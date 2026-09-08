@@ -8,12 +8,12 @@
         placeholder="全部来源"
         @change="withFilterReset"
       >
-        <el-option :value="''" :label="`全部来源（${total}）`" />
+        <el-option :value="''" :label="`全部来源 · ${total}`" />
         <el-option
           v-for="item in sources"
           :key="item.name"
           :value="item.name"
-          :label="`${item.name}（${item.count}）`"
+          :label="`${item.name} · ${item.count}`"
         />
       </el-select>
 
@@ -75,7 +75,7 @@
         v-model="foldText"
         class="ll-fold-input"
         :class="{ 'is-invalid': invalidFold && foldPattern === undefined }"
-        placeholder="折叠包含…的行（正则）"
+        placeholder="折叠包含…的行"
         spellcheck="false"
         @input="withFilterReset"
       />
@@ -108,7 +108,7 @@
             @click="wrap = !wrap"
           />
         </el-tooltip>
-        <el-tooltip content="清空视图（服务端缓冲不动）" placement="bottom">
+        <el-tooltip content="清空视图" placement="bottom">
           <el-button text type="info" :icon="Delete" @click="clearView" />
         </el-tooltip>
       </div>
@@ -149,12 +149,12 @@
                   item.expanded ? '▾' : '▸'
                 }}</span>
                 <span v-if="item.expanded"
-                  >已展开 {{ item.items.length }} 行（点击折叠）</span
+                  >已展开 {{ item.items.length }} 行</span
                 >
                 <span v-else
-                  >已折叠 {{ item.items.length }} 行（自
+                  >已折叠 {{ item.items.length }} 行 · 自
                   {{ formatTime(item.items[0]!.timestamp) }} ·
-                  {{ item.items[0]!.name }}，点击展开）</span
+                  {{ item.items[0]!.name }}</span
                 >
               </el-button>
               <LogRow
