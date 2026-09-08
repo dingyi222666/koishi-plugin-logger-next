@@ -272,7 +272,8 @@ const visible = computed(() => {
 
 // ── 过滤状态 ────────────────────────────────────────────────
 const source = ref('')
-const query = ref('level:info')
+// 默认不过滤：打开即显示当前日志文件的全部记录（含之前的）
+const query = ref('')
 const caseSensitive = ref(false)
 const wrap = ref(true)
 
