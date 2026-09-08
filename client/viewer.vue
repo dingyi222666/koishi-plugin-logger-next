@@ -8,12 +8,12 @@
         placeholder="全部来源"
         @change="withFilterReset"
       >
-        <el-option :value="''" :label="`全部来源 · ${total}`" />
+        <el-option :value="''" :label="`全部来源（${total}）`" />
         <el-option
           v-for="item in sources"
           :key="item.name"
           :value="item.name"
-          :label="`${item.name} · ${item.count}`"
+          :label="`${item.name}（${item.count}）`"
         />
       </el-select>
 
