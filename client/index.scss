@@ -125,8 +125,6 @@
 .ll-suggest .el-button.ll-suggest-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
     width: 100%;
     height: auto;
     /* 原版 logger 的 EP 下拉项：20px 行高 + 上下 6px = 32px */
@@ -137,6 +135,15 @@
     font-size: 14px;
     line-height: 20px;
     text-align: left;
+
+    /* EP 会把 slot 内容包一层 <span>，两端对齐必须落在这一层 */
+    > span {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 32px;
+        width: 100%;
+    }
 
     &:hover,
     &.is-active {
@@ -325,6 +332,15 @@
     min-height: 20px;
     margin: 0;
     padding: 0 8px;
+
+    /* 同上：EP 的 slot 包层 */
+    > span {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        width: 100%;
+    }
 }
 
 .ll-fold-arrow {
