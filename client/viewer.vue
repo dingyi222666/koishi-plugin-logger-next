@@ -105,7 +105,7 @@
             text
             :type="wrap ? 'primary' : 'info'"
             :icon="Sort"
-            @click="wrap = !wrap"
+            @click="toggleWrap"
           />
         </el-tooltip>
         <el-tooltip content="清空视图" placement="bottom">
@@ -114,7 +114,7 @@
       </div>
     </div>
 
-    <!-- 控制台：全宽铺满 -->
+    <!-- 控制台：全宽铺满（虚拟滚动，只渲染视口内的行） -->
     <div class="ll-body">
       <div
         ref="scrollEl"
@@ -123,62 +123,61 @@
         @scroll="onScroll"
       >
         <p v-if="!loaded" class="ll-empty">正在加载日志缓冲…</p>
-        <p v-else-if="viewItems.length === 0" class="ll-empty">
+        <p v-else-if="rows.length === 0" class="ll-empty">
           {{
             queryFilter.invalid ? 'query 里有无效的正则。' : '没有匹配的日志。'
           }}
         </p>
-        <template v-else>
-          <template v-for="item in viewItems" :key="item.key">
-            <template v-if="item.kind === 'line'">
-              <LogRow
-                :data-match="item.match"
-                :entry="item.entry"
-                :wrap="wrap"
-                :pattern="queryFilter.highlight"
-                :current="
-                  queryFilter.highlight !== undefined && cursor === item.match
-                "
-                :selected="rowSelection.has(rowKey(item.entry))"
-                @mousedown="onRowMouseDown(item.entry, $event)"
-                @contextmenu="onRowContextMenu(item.entry, $event)"
-              />
-            </template>
-            <template v-else>
-              <el-button
-                link
-                class="ll-fold"
-                @click="toggleFold(item.key)"
+        <div
+          v-else
+          class="ll-vlist"
+          :style="wrap ? undefined : { minWidth: `${maxRowWidth}px` }"
+        >
+          <div
+            v-if="padTop > 0"
+            class="ll-pad"
+            :style="{ height: `${padTop}px` }"
+          />
+          <template v-for="(row, index) in visibleRows" :key="row.key">
+            <LogRow
+              v-if="row.kind === 'line'"
+              :data-row-key="row.key"
+              :data-row-index="windowRange.start + index"
+              :data-match="row.match"
+              :entry="row.entry"
+              :wrap="wrap"
+              :pattern="queryFilter.highlight"
+              :current="
+                queryFilter.highlight !== undefined && cursor === row.match
+              "
+              :selected="rowSelection.has(rowKey(row.entry))"
+              @mousedown="onRowMouseDown(row.entry, $event)"
+              @contextmenu="onRowContextMenu(row.entry, $event)"
+            />
+            <el-button
+              v-else
+              link
+              class="ll-fold"
+              :data-row-key="row.key"
+              :data-row-index="windowRange.start + index"
+              @click="toggleFold(row.key)"
+            >
+              <span class="ll-fold-arrow">{{
+                row.expanded ? '▾' : '▸'
+              }}</span>
+              <span v-if="row.expanded">已展开 {{ row.count }} 行</span>
+              <span v-else
+                >已折叠 {{ row.count }} 行 · 自 {{ row.time }} ·
+                {{ row.name }}</span
               >
-                <span class="ll-fold-arrow">{{
-                  item.expanded ? '▾' : '▸'
-                }}</span>
-                <span v-if="item.expanded"
-                  >已展开 {{ item.items.length }} 行</span
-                >
-                <span v-else
-                  >已折叠 {{ item.items.length }} 行 · 自
-                  {{ formatTime(item.items[0]!.timestamp) }} ·
-                  {{ item.items[0]!.name }}</span
-                >
-              </el-button>
-              <LogRow
-                v-for="line in item.lines"
-                :key="line.key"
-                :data-match="line.match"
-                :entry="line.entry"
-                :wrap="wrap"
-                :pattern="queryFilter.highlight"
-                :current="
-                  queryFilter.highlight !== undefined && cursor === line.match
-                "
-                :selected="rowSelection.has(rowKey(line.entry))"
-                @mousedown="onRowMouseDown(line.entry, $event)"
-                @contextmenu="onRowContextMenu(line.entry, $event)"
-              />
-            </template>
+            </el-button>
           </template>
-        </template>
+          <div
+            v-if="padBottom > 0"
+            class="ll-pad"
+            :style="{ height: `${padBottom}px` }"
+          />
+        </div>
       </div>
       <el-button
         v-if="!follow"
@@ -224,6 +223,7 @@ import LogRow from './LogRow.vue'
 import { ansiPlain } from './ansi'
 import { buildFeed } from './feed'
 import { formatTime, LEVEL_META } from './format'
+import { VirtualLayout } from './virtual'
 import {
     applySuggestion,
     buildSuggestions,
@@ -438,6 +438,169 @@ const lineEntries = computed(() =>
     )
 )
 
+// ── 虚拟滚动：只渲染视口内的行（可变行高，Fenwick 树维护偏移）──
+interface LineRow {
+    kind: 'line'
+    key: string
+    match: number
+    entry: Logger.Record
+}
+
+interface FoldRow {
+    kind: 'fold'
+    key: string
+    expanded: boolean
+    count: number
+    time: string
+    name: string
+}
+
+type Row = LineRow | FoldRow
+
+/** 未测量行高的估算值（= 一行 20px 行高）。 */
+const ROW_ESTIMATE = 20
+/** 视口上下额外多渲染几行，滚动时不留白。 */
+const OVERSCAN = 6
+
+/** 扁平化后的渲染行：折叠组头 +（展开时的）组内行。 */
+const rows = computed((): Row[] => {
+    const list: Row[] = []
+    for (const item of viewItems.value) {
+        if (item.kind === 'line') {
+            list.push({
+                kind: 'line',
+                key: item.key,
+                match: item.match,
+                entry: item.entry,
+            })
+            continue
+        }
+        const first = item.items[0]!
+        list.push({
+            kind: 'fold',
+            key: item.key,
+            expanded: item.expanded,
+            count: item.items.length,
+            time: formatTime(first.timestamp),
+            name: first.name,
+        })
+        for (const line of item.lines) {
+            list.push({
+                kind: 'line',
+                key: line.key,
+                match: line.match,
+                entry: line.entry,
+            })
+        }
+    }
+    return list
+})
+
+/** 已实测的行高（key → px），rows 重建时保留。 */
+const heightsByKey = new Map<string, number>()
+/** Fenwick 布局：O(log n) 前缀和 / 点更新。 */
+const layout = new VirtualLayout()
+/** 布局版本：布局原地变更后驱动 windowRange 重算。 */
+const layoutVersion = ref(0)
+
+/** 关闭换行时行内容的最大宽度（粘性最大值），保证横向滚动范围稳定。 */
+const maxRowWidth = ref(0)
+
+const scrollTop = ref(0)
+const viewportHeight = ref(0)
+
+/** 重建逐行高度与 Fenwick 树（rows 变化时调用）。 */
+function rebuildLayout(): void {
+    const list = rows.value
+    const heights = new Array<number>(list.length)
+    for (let i = 0; i < list.length; i++)
+        heights[i] = heightsByKey.get(list[i]!.key) ?? ROW_ESTIMATE
+    layout.rebuild(heights)
+    layoutVersion.value++
+}
+
+const windowRange = computed(() => {
+    void layoutVersion.value
+    return layout.range(scrollTop.value, viewportHeight.value, OVERSCAN)
+})
+
+const visibleRows = computed(() =>
+    rows.value.slice(windowRange.value.start, windowRange.value.end)
+)
+
+const padTop = computed(() => {
+    void layoutVersion.value
+    return layout.prefix(windowRange.value.start)
+})
+
+const padBottom = computed(() => {
+    void layoutVersion.value
+    return layout.totalHeight - layout.prefix(windowRange.value.end)
+})
+
+/** 命中序号 → rows 下标（跳转用）。 */
+const matchToRow = computed(() => {
+    const map = new Map<number, number>()
+    rows.value.forEach((row, index) => {
+        if (row.kind === 'line') map.set(row.match, index)
+    })
+    return map
+})
+
+/** 测量窗口内每行的实际高度，更新布局，并做滚动锚定。 */
+function measureRendered(): void {
+    const el = scrollEl.value
+    if (el === null || el === undefined) return
+    const nodes = el.querySelectorAll<HTMLElement>('[data-row-key]')
+    if (nodes.length === 0) return
+    const anchorIndex = layout.find(el.scrollTop)
+    const anchorOffset = layout.prefix(anchorIndex)
+    let changed = false
+    for (const node of nodes) {
+        const key = node.dataset.rowKey
+        const index = Number(node.dataset.rowIndex)
+        if (key === undefined || !Number.isInteger(index)) continue
+        if (index < 0 || index >= layout.length) continue
+        const rect = node.getBoundingClientRect()
+        if (rect.height <= 0) continue
+        if (!wrap.value && rect.width > maxRowWidth.value)
+            maxRowWidth.value = rect.width
+        const current = layout.height(index)
+        if (Math.abs(current - rect.height) < 0.5) continue
+        layout.setHeight(index, rect.height)
+        heightsByKey.set(key, rect.height)
+        changed = true
+    }
+    if (!changed) return
+    layoutVersion.value++
+    const delta = layout.prefix(anchorIndex) - anchorOffset
+    if (delta === 0 && !follow.value) return
+    void nextTick(() => {
+        const current = scrollEl.value
+        if (current === null || current === undefined) return
+        current.scrollTop = follow.value
+            ? current.scrollHeight
+            : scrollTop.value + delta
+        scrollTop.value = current.scrollTop
+    })
+}
+
+watch(
+    rows,
+    () => {
+        if (heightsByKey.size > rows.value.length) {
+            const keys = new Set(rows.value.map((row) => row.key))
+            for (const key of heightsByKey.keys()) {
+                if (!keys.has(key)) heightsByKey.delete(key)
+            }
+        }
+        rebuildLayout()
+    },
+    { immediate: true }
+)
+
+watch([windowRange, rows], () => measureRendered(), { flush: 'post' })
+
 const menuStyle = computed(() => ({
     left: `${Math.min(menu.value?.x ?? 0, window.innerWidth - 240)}px`,
     top: `${Math.min(
@@ -508,6 +671,7 @@ watch(
             newCount.value = 0
         } else if (follow.value) {
             el.scrollTop = el.scrollHeight
+            scrollTop.value = el.scrollTop
         } else if (delta > 0) {
             newCount.value += delta
         }
@@ -518,6 +682,7 @@ watch(
 function onScroll(): void {
     const el = scrollEl.value
     if (el === null || el === undefined) return
+    scrollTop.value = el.scrollTop
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32
     if (atBottom !== follow.value) follow.value = atBottom
     if (atBottom && newCount.value > 0) newCount.value = 0
@@ -527,7 +692,9 @@ function scrollToEnd(): void {
     follow.value = true
     newCount.value = 0
     const el = scrollEl.value
-    if (el !== null && el !== undefined) el.scrollTop = el.scrollHeight
+    if (el === null || el === undefined) return
+    el.scrollTop = el.scrollHeight
+    scrollTop.value = el.scrollTop
 }
 
 // ── 命中导航（控制台搜索同款）：Enter / Shift+Enter 在命中行间前后跳转 ──
@@ -538,11 +705,15 @@ function navigate(step: 1 | -1): void {
         (((cursor.value + step) % lineCount.value) + lineCount.value) %
         lineCount.value
     cursor.value = next
-    void nextTick(() => {
-        scrollEl.value
-            ?.querySelector(`[data-match="${next}"]`)
-            ?.scrollIntoView({ block: 'nearest' })
-    })
+    const rowIndex = matchToRow.value.get(next)
+    const el = scrollEl.value
+    if (rowIndex === undefined || el === null || el === undefined) return
+    const top = layout.prefix(rowIndex)
+    const height = layout.height(rowIndex)
+    if (top < el.scrollTop || top + height > el.scrollTop + el.clientHeight) {
+        el.scrollTop = Math.max(0, top - (el.clientHeight - height) / 2)
+        scrollTop.value = el.scrollTop
+    }
 }
 
 /** 改过滤条件时同步置位 resetCount（长度变化不计为新日志）。 */
@@ -554,6 +725,14 @@ function withFilterReset(): void {
 function toggleCase(): void {
     withFilterReset()
     caseSensitive.value = !caseSensitive.value
+}
+
+function toggleWrap(): void {
+    wrap.value = !wrap.value
+    heightsByKey.clear()
+    maxRowWidth.value = 0
+    rebuildLayout()
+    void nextTick(measureRendered)
 }
 
 function toggleFoldEnabled(): void {
@@ -694,13 +873,27 @@ function onMenuKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') closeMenu()
 }
 
+let resizeObserver: ResizeObserver | undefined
+
 onMounted(() => {
     window.addEventListener('mousedown', closeMenu)
     window.addEventListener('keydown', onMenuKeydown)
+    const el = scrollEl.value
+    if (el !== null && el !== undefined) {
+        viewportHeight.value = el.clientHeight
+        resizeObserver = new ResizeObserver(() => {
+            viewportHeight.value = el.clientHeight
+        })
+        resizeObserver.observe(el)
+        if (follow.value) el.scrollTop = el.scrollHeight
+        scrollTop.value = el.scrollTop
+    }
+    void nextTick(measureRendered)
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener('mousedown', closeMenu)
     window.removeEventListener('keydown', onMenuKeydown)
+    resizeObserver?.disconnect()
 })
 </script>

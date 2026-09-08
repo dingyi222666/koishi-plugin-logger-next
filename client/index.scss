@@ -215,6 +215,17 @@
     min-width: max-content;
 }
 
+/* 虚拟滚动的内层容器：撑起横向滚动范围（非换行时取粘性最大行宽） */
+.ll-vlist {
+    width: 100%;
+}
+
+/* 虚拟滚动的上下占位（未渲染的行高度） */
+.ll-pad {
+    width: 100%;
+    pointer-events: none;
+}
+
 .ll-empty {
     padding: 12px;
     color: #71717a;
@@ -226,8 +237,6 @@
     gap: 8px;
     padding: 0 26px 0 8px;
     border-radius: 4px;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 20px;
 
     &:hover {
         background: rgba(255, 255, 255, 0.05);
