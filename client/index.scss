@@ -210,11 +210,6 @@
     min-width: 100%;
 }
 
-.ll-console.is-nowrap .ll-content {
-    flex: 0 0 auto;
-    min-width: max-content;
-}
-
 /* 虚拟滚动的内层容器：撑起横向滚动范围（非换行时取粘性最大行宽） */
 .ll-vlist {
     width: 100%;
@@ -231,10 +226,10 @@
     color: #71717a;
 }
 
+/* 行内流式布局：内容折行时回到行首占满整行，而不是缩在 name 右侧的窄列里 */
 .ll-row {
     position: relative;
-    display: flex;
-    gap: 8px;
+    display: block;
     padding: 0 26px 0 8px;
     border-radius: 4px;
 
@@ -261,27 +256,26 @@
 }
 
 .ll-time {
-    flex-shrink: 0;
+    margin-right: 8px;
     color: #71717a;
     font-variant-numeric: tabular-nums;
 }
 
 .ll-level {
-    flex-shrink: 0;
+    display: inline-block;
     width: 12px;
+    margin-right: 8px;
     font-weight: 700;
     text-align: center;
 }
 
 .ll-name {
-    flex-shrink: 0;
+    margin-right: 8px;
     font-weight: 600;
     white-space: nowrap;
 }
 
 .ll-content {
-    flex: 1 1 auto;
-    min-width: 0;
     white-space: pre;
 
     &.is-wrap {
@@ -404,11 +398,21 @@
     }
 }
 
-/* 压过 `.el-button.is-link`：右键菜单项同样 32px（原版 logger 下拉项高度） */
+/* 压过 `.el-button.is-link`：右键菜单项同样 32px，且 hover 整行变色 */
 .ll-menu .el-button.ll-menu-item {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    box-sizing: border-box;
     height: auto;
     min-height: 32px;
     margin: 0;
     padding: 6px 12px;
+    border-radius: 4px;
     line-height: 20px;
+    text-align: left;
+
+    &:hover {
+        background: var(--k-hover-bg);
+    }
 }
