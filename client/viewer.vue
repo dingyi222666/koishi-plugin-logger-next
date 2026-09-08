@@ -221,7 +221,7 @@ import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
 import { Bottom, Delete, Fold, Sort } from '@element-plus/icons-vue'
 import LogRow from './LogRow.vue'
 import { ansiPlain } from './ansi'
-import { createFeed } from './feed'
+import { buildFeed } from './feed'
 import { formatTime, LEVEL_META } from './format'
 import { VirtualLayout } from './virtual'
 import {
@@ -261,8 +261,7 @@ const rowKey = (entry: Logger.Record): string =>
     `${entry.timestamp}:${entry.id}`
 
 // ── 数据：store.logs → 去重 / 截断后的 feed ──────────────────
-const feedCache = createFeed()
-const entries = computed(() => feedCache.update(props.logs))
+const entries = computed(() => buildFeed(props.logs))
 
 /** 「清空视图」的本地水位：只隐藏已看到的，服务端缓冲与 store 不动。 */
 const cleared = ref<{ ts: number; id: number } | null>(null)
