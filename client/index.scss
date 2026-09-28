@@ -297,9 +297,11 @@
     width: 14px;
     height: 20px;
     color: #71717a;
-    font-size: 9px;
+    font-size: 11px;
     cursor: pointer;
-    transition: transform 0.15s ease;
+    transform: rotate(0deg);
+    transform-origin: center;
+    transition: transform 0.2s ease;
 
     &.is-open {
         transform: rotate(90deg);
@@ -347,6 +349,24 @@
 }
 
 .ll-ansi {
+    white-space: inherit;
+}
+
+/* 多行日志首行之后的内容：折叠/展开用 grid 行高做过渡动画（首行始终可见） */
+.ll-rest {
+    display: grid;
+    grid-template-rows: 1fr;
+    white-space: inherit;
+    transition: grid-template-rows 0.2s ease;
+}
+
+.ll-rest.is-folded {
+    grid-template-rows: 0fr;
+}
+
+.ll-rest-inner {
+    min-height: 0;
+    overflow: hidden;
     white-space: inherit;
 }
 

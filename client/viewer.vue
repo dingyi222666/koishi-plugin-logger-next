@@ -595,21 +595,31 @@ function toggleWrap(): void {
     void nextTick(measureRendered)
 }
 
-/** 单条折叠开关（gutter 箭头）：当前行一定在视口内，行高变化交给测量 watch。 */
+/**
+ * 单条折叠开关（gutter 箭头）：内容用 grid 行高过渡收起/展开；动画期间用 rAF
+ * 反复实测该行高度，让虚拟滚动偏移随动画同步（否则下方行会在 0.2s 内错位）。
+ */
 function toggleFoldRow(key: string): void {
     const next = new Set(foldedRows.value)
     if (next.has(key)) next.delete(key)
     else next.add(key)
     foldedRows.value = next
+    scheduleFoldAnimation()
 }
 
-/** 批量折叠状态变化：整体行高会变，重置测量缓存并重建（测量 watch 随后重测视口）。 */
-function resetFoldHeights(): void {
-    heightsByKey.clear()
-    maxRowWidth.value = 0
-    rebuildLayout()
+let foldAnimEnd = 0
+function pumpFoldAnimation(): void {
+    measureRendered()
+    if (performance.now() < foldAnimEnd) requestAnimationFrame(pumpFoldAnimation)
+}
+/** 启动/续期动画期间的实测循环（时长略大于 CSS 过渡 0.2s）。 */
+function scheduleFoldAnimation(): void {
+    const active = foldAnimEnd > performance.now()
+    foldAnimEnd = performance.now() + 260
+    if (!active) requestAnimationFrame(pumpFoldAnimation)
 }
 
+/** 批量折叠：整体行高变化，走与单条相同的动画（视口外行按滚动时惰性重测）。 */
 function foldSelected(): void {
     const next = new Set(foldedRows.value)
     for (const entry of lineEntries.value) {
@@ -620,7 +630,7 @@ function foldSelected(): void {
             next.add(rowKey(entry))
     }
     foldedRows.value = next
-    resetFoldHeights()
+    scheduleFoldAnimation()
 }
 
 function foldAll(): void {
@@ -629,13 +639,13 @@ function foldAll(): void {
         if (contentLines(entry.content) > 1) next.add(rowKey(entry))
     }
     foldedRows.value = next
-    resetFoldHeights()
+    scheduleFoldAnimation()
 }
 
 function expandAll(): void {
     if (foldedRows.value.size === 0) return
     foldedRows.value = new Set()
-    resetFoldHeights()
+    scheduleFoldAnimation()
 }
 
 function clearView(): void {

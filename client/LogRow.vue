@@ -20,9 +20,14 @@
       <span class="ll-name" :style="{ color: nameColor(entry.name) }">{{
         entry.name
       }}</span>
-      <span class="ll-content" :class="{ 'is-wrap': wrap }">
-        <AnsiText :content="displayContent" :pattern="pattern" />
-      </span>
+      <span class="ll-content" :class="{ 'is-wrap': wrap }"
+        ><AnsiText :content="firstLine" :pattern="pattern" /><span
+          v-if="foldable"
+          class="ll-rest"
+          :class="{ 'is-folded': folded === true }"
+          ><span class="ll-rest-inner"
+            ><AnsiText :content="restContent" :pattern="pattern" /></span
+        ></span></span>
     </span>
     <!-- 原版 logger 同款：跳到产生这条日志的插件 -->
     <router-link
@@ -66,12 +71,16 @@ const rowClass = computed(() => ({
     'is-current': props.current === true,
 }))
 
-/** 折叠态只渲染第一逻辑行（在首个 \n 处截断，不会切断 ANSI 序列）。 */
-const displayContent = computed((): string => {
-    if (props.folded !== true) return props.entry.content
-    const content = props.entry.content
-    const nl = content.indexOf('\n')
-    return nl === -1 ? content : content.slice(0, nl)
+/** 首行（首个 \n 之前）：折叠态也始终显示，作为收起后的一行。 */
+const firstLine = computed((): string => {
+    const nl = props.entry.content.indexOf('\n')
+    return nl === -1 ? props.entry.content : props.entry.content.slice(0, nl)
+})
+
+/** 首行之后的内容（折叠时用 grid 行高动画收起的部分）。 */
+const restContent = computed((): string => {
+    const nl = props.entry.content.indexOf('\n')
+    return nl === -1 ? '' : props.entry.content.slice(nl + 1)
 })
 
 /** 服务端写入的 `meta.paths`（产生这条日志的插件路径链）。 */
