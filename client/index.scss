@@ -176,11 +176,6 @@
     box-shadow: 0 0 0 1px var(--k-color-danger) inset;
 }
 
-.ll-collapse-threshold {
-    width: 130px;
-    flex-shrink: 0;
-}
-
 .ll-actions {
     display: flex;
     align-items: center;
@@ -296,6 +291,37 @@
     }
 }
 
+/* 折叠装订线：多行日志在时间戳左侧显示可点的折叠箭头（IDE 折叠代码块同款） */
+.ll-gutter {
+    flex-shrink: 0;
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 20px;
+}
+
+.ll-caret {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 20px;
+    color: #71717a;
+    font-size: 9px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+
+    &.is-open {
+        transform: rotate(90deg);
+    }
+
+    &:hover {
+        color: #e4e4e7;
+    }
+}
+
 .ll-time {
     flex-shrink: 0;
     margin-right: 8px;
@@ -407,37 +433,6 @@
 .ll-fold-arrow {
     color: #71717a;
     font-weight: 700;
-}
-
-/* 收起超长日志：单条内部截断后，在内容下方另起一行的展开/收起提示 */
-.ll-more {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    width: max-content;
-    color: #71717a;
-    font-family: var(--ll-mono);
-    font-size: 14px;
-    line-height: 20px;
-
-    &:hover {
-        color: #e4e4e7;
-    }
-}
-
-/* 压过 `.el-button.is-link`：收起提示保持 20px 行高 */
-.ll-console .el-button.ll-more {
-    height: 20px;
-    min-height: 20px;
-    margin: 0;
-    padding: 0;
-
-    > span {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
 }
 
 .ll-float {

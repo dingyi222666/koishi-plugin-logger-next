@@ -80,18 +80,6 @@
         @input="withFilterReset"
       />
 
-      <el-input-number
-        v-if="collapseLong"
-        :model-value="collapseThreshold"
-        class="ll-collapse-threshold"
-        :min="1"
-        :max="200"
-        :step="1"
-        controls-position="right"
-        title="收起后显示的行数（日志超过该值 +2 行才会被收起）"
-        @change="onThresholdChange"
-      />
-
       <div class="ll-actions">
         <el-tooltip content="折叠包含某模式的行" placement="bottom">
           <el-button
@@ -99,14 +87,6 @@
             :type="foldEnabled ? 'primary' : 'info'"
             :icon="Fold"
             @click="toggleFoldEnabled"
-          />
-        </el-tooltip>
-        <el-tooltip content="收起超长日志" placement="bottom">
-          <el-button
-            text
-            :type="collapseLong ? 'primary' : 'info'"
-            :icon="DCaret"
-            @click="toggleCollapseLong"
           />
         </el-tooltip>
         <el-tooltip
@@ -171,8 +151,9 @@
                 queryFilter.highlight !== undefined && cursor === row.match
               "
               :selected="rowSelection.has(rowKey(row.entry))"
-              :collapse="collapseFor(row.entry)"
-              @toggle="toggleLong(row.key)"
+              :foldable="contentLines(row.entry.content) > 1"
+              :folded="foldedRows.has(row.key)"
+              @toggle="toggleFoldRow(row.key)"
               @mousedown="onRowMouseDown(row.entry, $event)"
               @contextmenu="onRowContextMenu(row.entry, $event)"
             />
@@ -239,15 +220,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Logger } from 'koishi'
-import {
-    ElButton,
-    ElInput,
-    ElInputNumber,
-    ElOption,
-    ElSelect,
-    ElTooltip,
-} from 'element-plus'
-import { Bottom, DCaret, Delete, Fold, Sort } from '@element-plus/icons-vue'
+import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
+import { Bottom, Delete, Fold, Sort } from '@element-plus/icons-vue'
 import LogRow from './LogRow.vue'
 import { ansiPlain } from './ansi'
 import { buildFeed } from './feed'
@@ -315,32 +289,8 @@ const foldEnabled = ref(false)
 const foldText = ref('')
 const expandedFolds = ref<Set<string>>(new Set())
 
-// 收起超长日志：默认关，开关与阈值持久化到 localStorage（见文件末尾 watch）
-const COLLAPSE_STORAGE_KEY = 'logger-next:collapse-long'
-const collapseSaved = ((): { enabled: boolean; threshold: number } => {
-    try {
-        const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY)
-        if (raw !== null) {
-            const parsed = JSON.parse(raw) as {
-                enabled?: unknown
-                threshold?: unknown
-            }
-            const threshold = Number(parsed.threshold)
-            return {
-                enabled: parsed.enabled === true,
-                threshold:
-                    Number.isInteger(threshold) && threshold >= 1
-                        ? threshold
-                        : 8,
-            }
-        }
-    } catch {}
-    return { enabled: false, threshold: 8 }
-})()
-const collapseLong = ref(collapseSaved.enabled)
-const collapseThreshold = ref(collapseSaved.threshold)
-/** 手动展开的超长条（会话内临时，按 rowKey 记）。 */
-const expandedLongRows = ref<Set<string>>(new Set())
+/** 手动折叠成一行的多行日志（会话内临时、不持久化，按 rowKey 记；默认空=全展开）。 */
+const foldedRows = ref<Set<string>>(new Set())
 
 const cursor = ref(0)
 const rowSelection = ref<Set<string>>(new Set())
@@ -425,30 +375,6 @@ function contentLines(content: string): number {
         if (content.charCodeAt(i) === 10) count++
     }
     return count
-}
-
-/**
- * 单条日志的收起状态：
- * - null：不收（未开启 / 不够长 / 命中当前 query 高亮——命中的整条展开，避免把命中藏进收起区）
- * - { lines, hidden, expanded }：可收，expanded 由手动展开决定
- * 只有逻辑行数 ≥ 阈值 + 2 才收（否则省不下一行，反而多出一行提示）。
- */
-function collapseFor(
-    entry: Logger.Record
-): { lines: number; hidden: number; expanded: boolean } | null {
-    if (!collapseLong.value) return null
-    const threshold = collapseThreshold.value
-    if (!Number.isInteger(threshold) || threshold < 1) return null
-    const total = contentLines(entry.content)
-    if (total < threshold + 2) return null
-    const highlight = queryFilter.value.highlight
-    if (highlight !== undefined && highlight.test(ansiPlain(entry.content)))
-        return null
-    return {
-        lines: threshold,
-        hidden: total - threshold,
-        expanded: expandedLongRows.value.has(rowKey(entry)),
-    }
 }
 
 /** 折叠分组（Fold Lines Like This）：连续命中折叠 pattern 的 ≥2 行折成一组。 */
@@ -697,17 +623,14 @@ watch(
     rows,
     () => {
         const list = rows.value
-        if (
-            heightsByKey.size > list.length ||
-            expandedLongRows.value.size > 0
-        ) {
+        if (heightsByKey.size > list.length || foldedRows.value.size > 0) {
             const keys = new Set(list.map((row) => row.key))
             for (const key of heightsByKey.keys()) {
                 if (!keys.has(key)) heightsByKey.delete(key)
             }
             // 原地删除失效 key（不替换 Set，避免触发下面的测量 watch）
-            for (const key of expandedLongRows.value) {
-                if (!keys.has(key)) expandedLongRows.value.delete(key)
+            for (const key of foldedRows.value) {
+                if (!keys.has(key)) foldedRows.value.delete(key)
             }
         }
         rebuildLayout()
@@ -715,24 +638,8 @@ watch(
     { immediate: true }
 )
 
-// 收起开关 / 阈值：持久化，并按整体行高变化重建布局（与切换换行同理）
-watch([collapseLong, collapseThreshold], () => {
-    try {
-        localStorage.setItem(
-            COLLAPSE_STORAGE_KEY,
-            JSON.stringify({
-                enabled: collapseLong.value,
-                threshold: collapseThreshold.value,
-            })
-        )
-    } catch {}
-    heightsByKey.clear()
-    maxRowWidth.value = 0
-    rebuildLayout()
-    void nextTick(measureRendered)
-})
-
-watch([windowRange, rows, expandedLongRows], () => measureRendered(), {
+// 折叠状态变化会改变行高：随之重测视口内的行并做滚动锚定
+watch([windowRange, rows, foldedRows], () => measureRendered(), {
     flush: 'post',
 })
 
@@ -755,6 +662,12 @@ const menuItems = computed((): MenuItem[] => {
         rowSelection.value.has(rowKey(entry))
     )
     const hasRows = selected.length > 0
+    const canFoldSelected = selected.some(
+        (entry) => contentLines(entry.content) > 1
+    )
+    const canFoldAny = lineEntries.value.some(
+        (entry) => contentLines(entry.content) > 1
+    )
     return [
         {
             label: '复制内容',
@@ -783,6 +696,21 @@ const menuItems = computed((): MenuItem[] => {
                         )
                         .join('\n')
                 ),
+        },
+        {
+            label: '折叠当前行',
+            disabled: !canFoldSelected,
+            action: () => foldSelected(),
+        },
+        {
+            label: '折叠全部行',
+            disabled: !canFoldAny,
+            action: () => foldAll(),
+        },
+        {
+            label: '展开全部',
+            disabled: foldedRows.value.size === 0,
+            action: () => expandAll(),
         },
         {
             label: '清空视图',
@@ -883,21 +811,47 @@ function toggleFold(key: string): void {
     expandedFolds.value = next
 }
 
-function toggleCollapseLong(): void {
-    collapseLong.value = !collapseLong.value
-}
-
-function onThresholdChange(value: number | undefined): void {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        collapseThreshold.value = Math.max(1, Math.round(value))
-    }
-}
-
-function toggleLong(key: string): void {
-    const next = new Set(expandedLongRows.value)
+/** 单条折叠开关（gutter 箭头）：当前行一定在视口内，行高变化交给测量 watch。 */
+function toggleFoldRow(key: string): void {
+    const next = new Set(foldedRows.value)
     if (next.has(key)) next.delete(key)
     else next.add(key)
-    expandedLongRows.value = next
+    foldedRows.value = next
+}
+
+/** 批量折叠状态变化：整体行高会变，重置测量缓存并重建（测量 watch 随后重测视口）。 */
+function resetFoldHeights(): void {
+    heightsByKey.clear()
+    maxRowWidth.value = 0
+    rebuildLayout()
+}
+
+function foldSelected(): void {
+    const next = new Set(foldedRows.value)
+    for (const entry of lineEntries.value) {
+        if (
+            rowSelection.value.has(rowKey(entry)) &&
+            contentLines(entry.content) > 1
+        )
+            next.add(rowKey(entry))
+    }
+    foldedRows.value = next
+    resetFoldHeights()
+}
+
+function foldAll(): void {
+    const next = new Set(foldedRows.value)
+    for (const entry of lineEntries.value) {
+        if (contentLines(entry.content) > 1) next.add(rowKey(entry))
+    }
+    foldedRows.value = next
+    resetFoldHeights()
+}
+
+function expandAll(): void {
+    if (foldedRows.value.size === 0) return
+    foldedRows.value = new Set()
+    resetFoldHeights()
 }
 
 function clearView(): void {
@@ -907,7 +861,7 @@ function clearView(): void {
         : { ts: Date.now(), id: Number.MAX_SAFE_INTEGER }
     rowSelection.value = new Set()
     anchorKey.value = null
-    expandedLongRows.value = new Set()
+    foldedRows.value = new Set()
     withFilterReset()
 }
 
