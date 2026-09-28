@@ -164,18 +164,6 @@
     color: var(--k-text-light);
 }
 
-.ll-fold-input {
-    width: 220px;
-}
-
-.ll-fold-input .el-input__inner {
-    font-family: var(--ll-mono);
-}
-
-.ll-fold-input.is-invalid .el-input__wrapper {
-    box-shadow: 0 0 0 1px var(--k-color-danger) inset;
-}
-
 .ll-actions {
     display: flex;
     align-items: center;
@@ -391,48 +379,6 @@
     border-radius: 2px;
     background: rgba(234, 179, 8, 0.4);
     color: #fafafa;
-}
-
-.ll-fold {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    width: 100%;
-    padding: 0 8px;
-    border-radius: 4px;
-    color: #a1a1aa;
-    font-family: var(--ll-mono);
-    font-size: 14px;
-    line-height: 20px;
-    text-align: left;
-
-    &:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: #e4e4e7;
-    }
-}
-
-/* 压过 `.el-button.is-link`：折叠行保持 20px 行高 */
-.ll-console .el-button.ll-fold {
-    height: 20px;
-    min-height: 20px;
-    margin: 0;
-    padding: 0 8px;
-
-    /* 同上：EP 的 slot 包层 */
-    > span {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 8px;
-        width: 100%;
-    }
-}
-
-.ll-fold-arrow {
-    color: #71717a;
-    font-weight: 700;
 }
 
 .ll-float {
