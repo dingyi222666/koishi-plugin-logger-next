@@ -327,6 +327,11 @@ const lineCount = computed(() => rows.value.length)
 /** 渲染中的行顺序（范围选择 / 菜单拷贝按这个顺序）。 */
 const lineEntries = computed(() => rows.value.map((row) => row.entry))
 
+/** 当前视口实际渲染的行（折叠菜单按它区分「界面内 / 全部」）。 */
+const viewportEntries = computed(() =>
+    visibleRows.value.map((row) => row.entry)
+)
+
 /** 已实测的行高（key → px），rows 重建时保留。 */
 const heightsByKey = new Map<string, number>()
 /** Fenwick 布局：O(log n) 前缀和 / 点更新。 */
@@ -453,9 +458,8 @@ const menuItems = computed((): MenuItem[] => {
     const canFoldSelected = selected.some((entry) =>
         entry.content.includes('\n')
     )
-    const canFoldAny = lineEntries.value.some((entry) =>
-        entry.content.includes('\n')
-    )
+    const inView = viewportEntries.value
+    const all = lineEntries.value
     return [
         {
             label: '复制内容',
@@ -491,14 +495,34 @@ const menuItems = computed((): MenuItem[] => {
             action: () => foldSelected(),
         },
         {
-            label: '折叠全部行',
-            disabled: !canFoldAny,
-            action: () => foldAll(),
+            label: '折叠界面内',
+            disabled: !inView.some(
+                (entry) =>
+                    entry.content.includes('\n') &&
+                    !foldedRows.value.has(rowKey(entry))
+            ),
+            action: () => foldAll(inView),
+        },
+        {
+            label: '折叠全部',
+            disabled: !all.some(
+                (entry) =>
+                    entry.content.includes('\n') &&
+                    !foldedRows.value.has(rowKey(entry))
+            ),
+            action: () => foldAll(all),
+        },
+        {
+            label: '展开界面内',
+            disabled: !inView.some((entry) =>
+                foldedRows.value.has(rowKey(entry))
+            ),
+            action: () => expandAll(inView),
         },
         {
             label: '展开全部',
             disabled: foldedRows.value.size === 0,
-            action: () => expandAll(),
+            action: () => expandAll(all),
         },
         {
             label: '清空视图',
@@ -624,18 +648,26 @@ function foldSelected(): void {
     scheduleFoldAnimation()
 }
 
-function foldAll(): void {
+/** 折叠给定范围内的全部多行日志（界面内 / 全部共用）。 */
+function foldAll(list: Logger.Record[]): void {
     const next = new Set(foldedRows.value)
-    for (const entry of lineEntries.value) {
+    for (const entry of list) {
         if (entry.content.includes('\n')) next.add(rowKey(entry))
     }
     foldedRows.value = next
     scheduleFoldAnimation()
 }
 
-function expandAll(): void {
+/** 展开给定范围内的全部已折叠日志（界面内 / 全部共用）。 */
+function expandAll(list: Logger.Record[]): void {
     if (foldedRows.value.size === 0) return
-    foldedRows.value = new Set()
+    if (list === lineEntries.value) {
+        foldedRows.value = new Set()
+    } else {
+        const next = new Set(foldedRows.value)
+        for (const entry of list) next.delete(rowKey(entry))
+        foldedRows.value = next
+    }
     scheduleFoldAnimation()
 }
 
