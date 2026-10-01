@@ -1,6 +1,6 @@
 <template>
   <div class="ll-root">
-    <!-- 过滤栏：来源 + Logcat 式 query（语法高亮 + 补全）+ 折叠 + 动作 -->
+    <!-- 过滤栏：来源 + Logcat 式 query（语法高亮 + 补全）+ 动作 -->
     <div class="ll-toolbar">
       <el-select
         v-model="source"
@@ -70,25 +70,7 @@
         </div>
       </div>
 
-      <el-input
-        v-if="foldEnabled"
-        v-model="foldText"
-        class="ll-fold-input"
-        :class="{ 'is-invalid': invalidFold && foldPattern === undefined }"
-        placeholder="折叠包含…的行"
-        spellcheck="false"
-        @input="withFilterReset"
-      />
-
       <div class="ll-actions">
-        <el-tooltip content="折叠包含某模式的行" placement="bottom">
-          <el-button
-            text
-            :type="foldEnabled ? 'primary' : 'info'"
-            :icon="Fold"
-            @click="toggleFoldEnabled"
-          />
-        </el-tooltip>
         <el-tooltip
           :content="follow ? '已跟随最新' : '滚动到最新并跟随'"
           placement="bottom"
@@ -138,40 +120,25 @@
             class="ll-pad"
             :style="{ height: `${padTop}px` }"
           />
-          <template v-for="(row, index) in visibleRows" :key="row.key">
-            <LogRow
-              v-if="row.kind === 'line'"
-              :data-row-key="row.key"
-              :data-row-index="windowRange.start + index"
-              :data-match="row.match"
-              :entry="row.entry"
-              :wrap="wrap"
-              :pattern="queryFilter.highlight"
-              :current="
-                queryFilter.highlight !== undefined && cursor === row.match
-              "
-              :selected="rowSelection.has(rowKey(row.entry))"
-              @mousedown="onRowMouseDown(row.entry, $event)"
-              @contextmenu="onRowContextMenu(row.entry, $event)"
-            />
-            <el-button
-              v-else
-              link
-              class="ll-fold"
-              :data-row-key="row.key"
-              :data-row-index="windowRange.start + index"
-              @click="toggleFold(row.key)"
-            >
-              <span class="ll-fold-arrow">{{
-                row.expanded ? '▾' : '▸'
-              }}</span>
-              <span v-if="row.expanded">已展开 {{ row.count }} 行</span>
-              <span v-else
-                >已折叠 {{ row.count }} 行 · 自 {{ row.time }} ·
-                {{ row.name }}</span
-              >
-            </el-button>
-          </template>
+          <LogRow
+            v-for="(row, index) in visibleRows"
+            :key="row.key"
+            :data-row-key="row.key"
+            :data-row-index="windowRange.start + index"
+            :data-match="row.match"
+            :entry="row.entry"
+            :wrap="wrap"
+            :pattern="queryFilter.highlight"
+            :current="
+              queryFilter.highlight !== undefined && cursor === row.match
+            "
+            :selected="rowSelection.has(rowKey(row.entry))"
+            :foldable="row.entry.content.includes('\n')"
+            :folded="foldedRows.has(row.key)"
+            @toggle="toggleFoldRow(row.key)"
+            @mousedown="onRowMouseDown(row.entry, $event)"
+            @contextmenu="onRowContextMenu(row.entry, $event)"
+          />
           <div
             v-if="padBottom > 0"
             class="ll-pad"
@@ -218,7 +185,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Logger } from 'koishi'
 import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
-import { Bottom, Delete, Fold, Sort } from '@element-plus/icons-vue'
+import { Bottom, Delete, Sort } from '@element-plus/icons-vue'
 import LogRow from './LogRow.vue'
 import { ansiPlain } from './ansi'
 import { buildFeed } from './feed'
@@ -239,23 +206,6 @@ const props = withDefaults(
     }>(),
     { loaded: true }
 )
-
-interface LineItem {
-    kind: 'line'
-    key: string
-    entry: Logger.Record
-    match: number
-}
-
-interface FoldItem {
-    kind: 'fold'
-    key: string
-    items: Logger.Record[]
-    expanded: boolean
-    lines: LineItem[]
-}
-
-type ViewItem = LineItem | FoldItem
 
 const rowKey = (entry: Logger.Record): string =>
     `${entry.timestamp}:${entry.id}`
@@ -282,9 +232,8 @@ const query = ref('')
 const caseSensitive = ref(false)
 const wrap = ref(true)
 
-const foldEnabled = ref(false)
-const foldText = ref('')
-const expandedFolds = ref<Set<string>>(new Set())
+/** 手动折叠成一行的多行日志（会话内临时、不持久化，按 rowKey 记；默认空=全展开）。 */
+const foldedRows = ref<Set<string>>(new Set())
 
 const cursor = ref(0)
 const rowSelection = ref<Set<string>>(new Set())
@@ -343,17 +292,6 @@ const suggestions = computed(() =>
     )
 )
 
-const invalidFold = computed(() => foldEnabled.value && foldText.value !== '')
-
-const foldPattern = computed((): RegExp | undefined => {
-    if (!foldEnabled.value || foldText.value === '') return undefined
-    try {
-        return new RegExp(foldText.value, caseSensitive.value ? '' : 'i')
-    } catch {
-        return undefined
-    }
-})
-
 const filtered = computed(() =>
     visible.value.filter(
         (entry) =>
@@ -362,152 +300,37 @@ const filtered = computed(() =>
     )
 )
 
-/** 折叠分组（Fold Lines Like This）：连续命中折叠 pattern 的 ≥2 行折成一组。 */
-const display = computed(
-    (): Array<Omit<LineItem, 'match'> | Omit<FoldItem, 'expanded' | 'lines'>> => {
-        const pattern = foldPattern.value
-        if (pattern === undefined) {
-            return filtered.value.map((entry) => ({
-                kind: 'line' as const,
-                key: rowKey(entry),
-                entry,
-            }))
-        }
-        const items: Array<
-            Omit<LineItem, 'match'> | Omit<FoldItem, 'expanded' | 'lines'>
-        > = []
-        let group: Logger.Record[] = []
-        const flush = (): void => {
-            if (group.length === 0) return
-            if (group.length === 1) {
-                items.push({
-                    kind: 'line',
-                    key: rowKey(group[0]!),
-                    entry: group[0]!,
-                })
-            } else {
-                items.push({
-                    kind: 'fold',
-                    key: `fold:${rowKey(group[0]!)}`,
-                    items: group,
-                })
-            }
-            group = []
-        }
-        for (const entry of filtered.value) {
-            if (
-                pattern.test(ansiPlain(entry.content)) ||
-                pattern.test(entry.name)
-            ) {
-                group.push(entry)
-                continue
-            }
-            flush()
-            items.push({ kind: 'line', key: rowKey(entry), entry })
-        }
-        flush()
-        return items
-    }
-)
-
-/** 渲染列表：分配命中导航用的序号（收起的折叠组不可跳转）。 */
-const viewItems = computed((): ViewItem[] => {
-    let match = 0
-    const items: ViewItem[] = []
-    for (const item of display.value) {
-        if (item.kind === 'line') {
-            items.push({ ...item, match: match++ })
-            continue
-        }
-        const expanded = expandedFolds.value.has(item.key)
-        const lines: LineItem[] = expanded
-            ? item.items.map((entry) => ({
-                  kind: 'line' as const,
-                  key: rowKey(entry),
-                  entry,
-                  match: match++,
-              }))
-            : []
-        items.push({ ...item, expanded, lines })
-    }
-    return items
-})
-
-/** 渲染出来的可跳转行数。 */
-const lineCount = computed(() =>
-    viewItems.value.reduce(
-        (total, item) =>
-            total + (item.kind === 'line' ? 1 : item.lines.length),
-        0
-    )
-)
-
-/** 渲染中的行（展开的折叠组展开计算），范围选择 / 菜单拷贝按这个顺序。 */
-const lineEntries = computed(() =>
-    viewItems.value.flatMap((item) =>
-        item.kind === 'line'
-            ? [item.entry]
-            : item.lines.map((line) => line.entry)
-    )
-)
-
 // ── 虚拟滚动：只渲染视口内的行（可变行高，Fenwick 树维护偏移）──
-interface LineRow {
-    kind: 'line'
+interface Row {
     key: string
     match: number
     entry: Logger.Record
 }
-
-interface FoldRow {
-    kind: 'fold'
-    key: string
-    expanded: boolean
-    count: number
-    time: string
-    name: string
-}
-
-type Row = LineRow | FoldRow
 
 /** 未测量行高的估算值（= 一行 20px 行高）。 */
 const ROW_ESTIMATE = 20
 /** 视口上下额外多渲染几行，滚动时不留白。 */
 const OVERSCAN = 6
 
-/** 扁平化后的渲染行：折叠组头 +（展开时的）组内行。 */
-const rows = computed((): Row[] => {
-    const list: Row[] = []
-    for (const item of viewItems.value) {
-        if (item.kind === 'line') {
-            list.push({
-                kind: 'line',
-                key: item.key,
-                match: item.match,
-                entry: item.entry,
-            })
-            continue
-        }
-        const first = item.items[0]!
-        list.push({
-            kind: 'fold',
-            key: item.key,
-            expanded: item.expanded,
-            count: item.items.length,
-            time: formatTime(first.timestamp),
-            name: first.name,
-        })
-        for (const line of item.lines) {
-            list.push({
-                kind: 'line',
-                key: line.key,
-                match: line.match,
-                entry: line.entry,
-            })
-        }
-    }
-    return list
-})
+/** 渲染行：每条日志一行，match 即其下标。 */
+const rows = computed((): Row[] =>
+    filtered.value.map((entry, index) => ({
+        key: rowKey(entry),
+        match: index,
+        entry,
+    }))
+)
+
+/** 可跳转行数。 */
+const lineCount = computed(() => rows.value.length)
+
+/** 渲染中的行顺序（范围选择 / 菜单拷贝按这个顺序）。 */
+const lineEntries = computed(() => rows.value.map((row) => row.entry))
+
+/** 当前视口实际渲染的行（折叠菜单按它区分「界面内 / 全部」）。 */
+const viewportEntries = computed(() =>
+    visibleRows.value.map((row) => row.entry)
+)
 
 /** 已实测的行高（key → px），rows 重建时保留。 */
 const heightsByKey = new Map<string, number>()
@@ -551,21 +374,6 @@ const padBottom = computed(() => {
     return layout.totalHeight - layout.prefix(windowRange.value.end)
 })
 
-/** 命中序号 → rows 下标：只在跳转时构建，rows 没变则复用。 */
-let matchIndexCache: { rows: Row[]; map: Map<number, number> } | undefined
-
-function rowIndexForMatch(match: number): number | undefined {
-    const list = rows.value
-    if (matchIndexCache === undefined || matchIndexCache.rows !== list) {
-        const map = new Map<number, number>()
-        list.forEach((row, index) => {
-            if (row.kind === 'line') map.set(row.match, index)
-        })
-        matchIndexCache = { rows: list, map }
-    }
-    return matchIndexCache.map.get(match)
-}
-
 /** 测量窗口内每行的实际高度，更新布局，并做滚动锚定。 */
 function measureRendered(): void {
     const el = scrollEl.value
@@ -607,10 +415,15 @@ function measureRendered(): void {
 watch(
     rows,
     () => {
-        if (heightsByKey.size > rows.value.length) {
-            const keys = new Set(rows.value.map((row) => row.key))
+        const list = rows.value
+        if (heightsByKey.size > list.length || foldedRows.value.size > 0) {
+            const keys = new Set(list.map((row) => row.key))
             for (const key of heightsByKey.keys()) {
                 if (!keys.has(key)) heightsByKey.delete(key)
+            }
+            // 原地删除失效 key（不替换 Set，避免触发下面的测量 watch）
+            for (const key of foldedRows.value) {
+                if (!keys.has(key)) foldedRows.value.delete(key)
             }
         }
         rebuildLayout()
@@ -618,7 +431,10 @@ watch(
     { immediate: true }
 )
 
-watch([windowRange, rows], () => measureRendered(), { flush: 'post' })
+// 折叠状态变化会改变行高：随之重测视口内的行并做滚动锚定
+watch([windowRange, rows, foldedRows], () => measureRendered(), {
+    flush: 'post',
+})
 
 const menuStyle = computed(() => ({
     left: `${Math.min(menu.value?.x ?? 0, window.innerWidth - 240)}px`,
@@ -639,6 +455,11 @@ const menuItems = computed((): MenuItem[] => {
         rowSelection.value.has(rowKey(entry))
     )
     const hasRows = selected.length > 0
+    const canFoldSelected = selected.some((entry) =>
+        entry.content.includes('\n')
+    )
+    const inView = viewportEntries.value
+    const all = lineEntries.value
     return [
         {
             label: '复制内容',
@@ -667,6 +488,41 @@ const menuItems = computed((): MenuItem[] => {
                         )
                         .join('\n')
                 ),
+        },
+        {
+            label: '折叠当前行',
+            disabled: !canFoldSelected,
+            action: () => foldSelected(),
+        },
+        {
+            label: '折叠界面内',
+            disabled: !inView.some(
+                (entry) =>
+                    entry.content.includes('\n') &&
+                    !foldedRows.value.has(rowKey(entry))
+            ),
+            action: () => foldAll(inView),
+        },
+        {
+            label: '折叠全部',
+            disabled: !all.some(
+                (entry) =>
+                    entry.content.includes('\n') &&
+                    !foldedRows.value.has(rowKey(entry))
+            ),
+            action: () => foldAll(all),
+        },
+        {
+            label: '展开界面内',
+            disabled: !inView.some((entry) =>
+                foldedRows.value.has(rowKey(entry))
+            ),
+            action: () => expandAll(inView),
+        },
+        {
+            label: '展开全部',
+            disabled: foldedRows.value.size === 0,
+            action: () => expandAll(all),
         },
         {
             label: '清空视图',
@@ -724,11 +580,11 @@ function navigate(step: 1 | -1): void {
         (((cursor.value + step) % lineCount.value) + lineCount.value) %
         lineCount.value
     cursor.value = next
-    const rowIndex = rowIndexForMatch(next)
     const el = scrollEl.value
-    if (rowIndex === undefined || el === null || el === undefined) return
-    const top = layout.prefix(rowIndex)
-    const height = layout.height(rowIndex)
+    if (el === null || el === undefined) return
+    // rows 与 filtered 一一对应，命中序号即行下标
+    const top = layout.prefix(next)
+    const height = layout.height(next)
     if (top < el.scrollTop || top + height > el.scrollTop + el.clientHeight) {
         el.scrollTop = Math.max(0, top - (el.clientHeight - height) / 2)
         scrollTop.value = el.scrollTop
@@ -754,17 +610,65 @@ function toggleWrap(): void {
     void nextTick(measureRendered)
 }
 
-function toggleFoldEnabled(): void {
-    withFilterReset()
-    foldEnabled.value = !foldEnabled.value
-}
-
-function toggleFold(key: string): void {
-    resetCount = true
-    const next = new Set(expandedFolds.value)
+/**
+ * 单条折叠开关（gutter 箭头）：内容用 grid 行高过渡收起/展开；动画期间用 rAF
+ * 反复实测该行高度，让虚拟滚动偏移随动画同步（否则下方行会在 0.2s 内错位）。
+ */
+function toggleFoldRow(key: string): void {
+    const next = new Set(foldedRows.value)
     if (next.has(key)) next.delete(key)
     else next.add(key)
-    expandedFolds.value = next
+    foldedRows.value = next
+    scheduleFoldAnimation()
+}
+
+let foldAnimEnd = 0
+function pumpFoldAnimation(): void {
+    measureRendered()
+    if (performance.now() < foldAnimEnd) requestAnimationFrame(pumpFoldAnimation)
+}
+/** 启动/续期动画期间的实测循环（时长略大于 CSS 过渡 0.2s）。 */
+function scheduleFoldAnimation(): void {
+    const active = foldAnimEnd > performance.now()
+    foldAnimEnd = performance.now() + 260
+    if (!active) requestAnimationFrame(pumpFoldAnimation)
+}
+
+/** 批量折叠：整体行高变化，走与单条相同的动画（视口外行按滚动时惰性重测）。 */
+function foldSelected(): void {
+    const next = new Set(foldedRows.value)
+    for (const entry of lineEntries.value) {
+        if (
+            rowSelection.value.has(rowKey(entry)) &&
+            entry.content.includes('\n')
+        )
+            next.add(rowKey(entry))
+    }
+    foldedRows.value = next
+    scheduleFoldAnimation()
+}
+
+/** 折叠给定范围内的全部多行日志（界面内 / 全部共用）。 */
+function foldAll(list: Logger.Record[]): void {
+    const next = new Set(foldedRows.value)
+    for (const entry of list) {
+        if (entry.content.includes('\n')) next.add(rowKey(entry))
+    }
+    foldedRows.value = next
+    scheduleFoldAnimation()
+}
+
+/** 展开给定范围内的全部已折叠日志（界面内 / 全部共用）。 */
+function expandAll(list: Logger.Record[]): void {
+    if (foldedRows.value.size === 0) return
+    if (list === lineEntries.value) {
+        foldedRows.value = new Set()
+    } else {
+        const next = new Set(foldedRows.value)
+        for (const entry of list) next.delete(rowKey(entry))
+        foldedRows.value = next
+    }
+    scheduleFoldAnimation()
 }
 
 function clearView(): void {
@@ -774,6 +678,7 @@ function clearView(): void {
         : { ts: Date.now(), id: Number.MAX_SAFE_INTEGER }
     rowSelection.value = new Set()
     anchorKey.value = null
+    foldedRows.value = new Set()
     withFilterReset()
 }
 
