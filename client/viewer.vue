@@ -133,7 +133,7 @@
               queryFilter.highlight !== undefined && cursor === row.match
             "
             :selected="rowSelection.has(rowKey(row.entry))"
-            :foldable="contentLines(row.entry.content) > 1"
+            :foldable="row.entry.content.includes('\n')"
             :folded="foldedRows.has(row.key)"
             @toggle="toggleFoldRow(row.key)"
             @mousedown="onRowMouseDown(row.entry, $event)"
@@ -300,15 +300,6 @@ const filtered = computed(() =>
     )
 )
 
-/** 每条日志的逻辑行数（content 里的 \n 段数），不分配数组。 */
-function contentLines(content: string): number {
-    let count = 1
-    for (let i = 0; i < content.length; i++) {
-        if (content.charCodeAt(i) === 10) count++
-    }
-    return count
-}
-
 // ── 虚拟滚动：只渲染视口内的行（可变行高，Fenwick 树维护偏移）──
 interface Row {
     key: string
@@ -459,11 +450,11 @@ const menuItems = computed((): MenuItem[] => {
         rowSelection.value.has(rowKey(entry))
     )
     const hasRows = selected.length > 0
-    const canFoldSelected = selected.some(
-        (entry) => contentLines(entry.content) > 1
+    const canFoldSelected = selected.some((entry) =>
+        entry.content.includes('\n')
     )
-    const canFoldAny = lineEntries.value.some(
-        (entry) => contentLines(entry.content) > 1
+    const canFoldAny = lineEntries.value.some((entry) =>
+        entry.content.includes('\n')
     )
     return [
         {
@@ -625,7 +616,7 @@ function foldSelected(): void {
     for (const entry of lineEntries.value) {
         if (
             rowSelection.value.has(rowKey(entry)) &&
-            contentLines(entry.content) > 1
+            entry.content.includes('\n')
         )
             next.add(rowKey(entry))
     }
@@ -636,7 +627,7 @@ function foldSelected(): void {
 function foldAll(): void {
     const next = new Set(foldedRows.value)
     for (const entry of lineEntries.value) {
-        if (contentLines(entry.content) > 1) next.add(rowKey(entry))
+        if (entry.content.includes('\n')) next.add(rowKey(entry))
     }
     foldedRows.value = next
     scheduleFoldAnimation()

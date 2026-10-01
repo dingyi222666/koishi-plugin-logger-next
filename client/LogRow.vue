@@ -21,7 +21,15 @@
         entry.name
       }}</span>
       <span class="ll-content" :class="{ 'is-wrap': wrap }"
-        ><AnsiText :content="firstLine" :pattern="pattern" /><span
+        ><AnsiText :content="firstLine" :pattern="pattern" /><button
+          v-if="foldable"
+          class="ll-ellipsis"
+          title="折叠 / 展开"
+          @mousedown.stop
+          @click.stop="$emit('toggle')"
+        >
+          … {{ restLines }} 行
+        </button><span
           v-if="foldable"
           class="ll-rest"
           :class="{ 'is-folded': folded === true }"
@@ -82,6 +90,11 @@ const restContent = computed((): string => {
     const nl = props.entry.content.indexOf('\n')
     return nl === -1 ? '' : props.entry.content.slice(nl + 1)
 })
+
+/** 收起的行数（首行之后），仅给占位文案用。 */
+const restLines = computed(
+    () => props.entry.content.split('\n').length - 1
+)
 
 /** 服务端写入的 `meta.paths`（产生这条日志的插件路径链）。 */
 const paths = computed(
