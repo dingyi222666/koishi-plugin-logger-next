@@ -187,9 +187,12 @@ import type { Logger } from 'koishi'
 import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
 import { Bottom, Delete, Sort } from '@element-plus/icons-vue'
 import LogRow from './LogRow.vue'
+import { captureAnchor, restoreAnchor } from './anchor'
 import { ansiPlain } from './ansi'
 import { buildFeed } from './feed'
 import { formatTime, LEVEL_META } from './format'
+import { createStateSaver, loadState } from './state'
+import type { ScrollAnchor } from './state'
 import { VirtualLayout } from './virtual'
 import {
     applySuggestion,
@@ -213,8 +216,13 @@ const rowKey = (entry: Logger.Record): string =>
 // ── 数据：store.logs → 去重 / 截断后的 feed ──────────────────
 const entries = computed(() => buildFeed(props.logs))
 
+/** 刷新前的视图状态；滚动恢复只消费一次（置 null）。 */
+const restored = ref(loadState())
+
 /** 「清空视图」的本地水位：只隐藏已看到的，服务端缓冲与 store 不动。 */
-const cleared = ref<{ ts: number; id: number } | null>(null)
+const cleared = ref<{ ts: number; id: number } | null>(
+    restored.value?.cleared ?? null
+)
 const visible = computed(() => {
     const cut = cleared.value
     if (cut === null) return entries.value
@@ -226,11 +234,11 @@ const visible = computed(() => {
 })
 
 // ── 过滤状态 ────────────────────────────────────────────────
-const source = ref('')
-// 默认不过滤：打开即显示当前日志文件的全部记录（含之前的）
-const query = ref('')
-const caseSensitive = ref(false)
-const wrap = ref(true)
+const source = ref(restored.value?.source ?? '')
+// 默认不过滤：打开即显示全部历史记录（含跨日 / 跨分段回溯）
+const query = ref(restored.value?.query ?? '')
+const caseSensitive = ref(restored.value?.caseSensitive ?? false)
+const wrap = ref(restored.value?.wrap ?? true)
 
 /** 手动折叠成一行的多行日志（会话内临时、不持久化，按 rowKey 记；默认空=全展开）。 */
 const foldedRows = ref<Set<string>>(new Set())
@@ -253,6 +261,7 @@ const follow = ref(true)
 const newCount = ref(0)
 let resetCount = false
 let prevLength = 0
+let pendingAnchor: ScrollAnchor | undefined
 
 // ── 派生 ────────────────────────────────────────────────────
 const total = computed(() => visible.value.length)
@@ -345,6 +354,23 @@ const maxRowWidth = ref(0)
 const scrollTop = ref(0)
 const viewportHeight = ref(0)
 
+const stateSaver = createStateSaver(() => ({
+    anchor: scrollEl.value
+        ? captureAnchor(scrollEl.value, rows.value, layout)
+        : undefined,
+    follow: follow.value,
+    source: source.value,
+    query: query.value,
+    caseSensitive: caseSensitive.value,
+    wrap: wrap.value,
+    cleared: cleared.value,
+}))
+
+watch(
+    [source, query, caseSensitive, wrap, cleared, follow],
+    stateSaver.schedule
+)
+
 /** 重建逐行高度与 Fenwick 树（rows 变化时调用）。 */
 function rebuildLayout(): void {
     const list = rows.value
@@ -377,7 +403,7 @@ const padBottom = computed(() => {
 /** 测量窗口内每行的实际高度，更新布局，并做滚动锚定。 */
 function measureRendered(): void {
     const el = scrollEl.value
-    if (el === null || el === undefined) return
+    if (!el) return
     const nodes = el.querySelectorAll<HTMLElement>('[data-row-key]')
     if (nodes.length === 0) return
     const anchorIndex = layout.find(el.scrollTop)
@@ -392,23 +418,34 @@ function measureRendered(): void {
         if (rect.height <= 0) continue
         if (!wrap.value && rect.width > maxRowWidth.value)
             maxRowWidth.value = rect.width
-        const current = layout.height(index)
-        if (Math.abs(current - rect.height) < 0.5) continue
+        if (Math.abs(layout.height(index) - rect.height) < 0.5) continue
         layout.setHeight(index, rect.height)
         heightsByKey.set(key, rect.height)
         changed = true
+    }
+    const pending = pendingAnchor
+    pendingAnchor = undefined
+    if (pending) {
+        const index = rows.value.findIndex((row) => row.key === pending.key)
+        if (index >= 0) {
+            if (changed) layoutVersion.value++
+            void nextTick(() => {
+                if (!scrollEl.value) return
+                restoreAnchor(scrollEl.value, pending, rows.value, layout)
+                scrollTop.value = scrollEl.value.scrollTop
+            })
+            return
+        }
     }
     if (!changed) return
     layoutVersion.value++
     const delta = layout.prefix(anchorIndex) - anchorOffset
     if (delta === 0 && !follow.value) return
     void nextTick(() => {
-        const current = scrollEl.value
-        if (current === null || current === undefined) return
-        current.scrollTop = follow.value
-            ? current.scrollHeight
-            : scrollTop.value + delta
-        scrollTop.value = current.scrollTop
+        const el = scrollEl.value
+        if (!el) return
+        el.scrollTop = follow.value ? el.scrollHeight : scrollTop.value + delta
+        scrollTop.value = el.scrollTop
     })
 }
 
@@ -539,7 +576,7 @@ watch(
         const delta = length - prevLength
         prevLength = length
         const el = scrollEl.value
-        if (el === null || el === undefined) return
+        if (!el) return
         if (resetCount) {
             // 过滤条件变了：长度差不算「新日志」
             resetCount = false
@@ -554,22 +591,55 @@ watch(
     { flush: 'post' }
 )
 
+function restoreScroll(state: ReturnType<typeof loadState>): void {
+    const el = scrollEl.value
+    if (!el || rows.value.length === 0) return
+
+    const anchor = state.anchor
+    const index = anchor ? restoreAnchor(el, anchor, rows.value, layout) : -1
+    follow.value = state.follow ?? (index < 0)
+    pendingAnchor = !follow.value && index >= 0 ? anchor : undefined
+    if (follow.value || index < 0) {
+        el.scrollTop = el.scrollHeight
+    }
+    scrollTop.value = el.scrollTop
+}
+
+function tryRestoreScroll(): void {
+    const state = restored.value
+    if (state === null || !scrollEl.value || rows.value.length === 0) return
+    restored.value = null
+    restoreScroll(state)
+}
+
+// rows 就绪时恢复刷新前的滚动位置；同时覆盖“初始数据已存在”的挂载场景。
+watch(
+    () => rows.value.length,
+    (length) => {
+        if (length === 0 || restored.value === null) return
+        void nextTick(tryRestoreScroll)
+    },
+    { flush: 'post' }
+)
+
 function onScroll(): void {
     const el = scrollEl.value
-    if (el === null || el === undefined) return
+    if (!el) return
     scrollTop.value = el.scrollTop
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32
     if (atBottom !== follow.value) follow.value = atBottom
     if (atBottom && newCount.value > 0) newCount.value = 0
+    stateSaver.schedule()
 }
 
 function scrollToEnd(): void {
     follow.value = true
     newCount.value = 0
     const el = scrollEl.value
-    if (el === null || el === undefined) return
+    if (!el) return
     el.scrollTop = el.scrollHeight
     scrollTop.value = el.scrollTop
+    stateSaver.schedule()
 }
 
 // ── 命中导航（控制台搜索同款）：Enter / Shift+Enter 在命中行间前后跳转 ──
@@ -581,7 +651,7 @@ function navigate(step: 1 | -1): void {
         lineCount.value
     cursor.value = next
     const el = scrollEl.value
-    if (el === null || el === undefined) return
+    if (!el) return
     // rows 与 filtered 一一对应，命中序号即行下标
     const top = layout.prefix(next)
     const height = layout.height(next)
@@ -802,22 +872,28 @@ let resizeObserver: ResizeObserver | undefined
 onMounted(() => {
     window.addEventListener('mousedown', closeMenu)
     window.addEventListener('keydown', onMenuKeydown)
+    window.addEventListener('beforeunload', stateSaver.save)
     const el = scrollEl.value
-    if (el !== null && el !== undefined) {
+    if (el) {
         viewportHeight.value = el.clientHeight
         resizeObserver = new ResizeObserver(() => {
             viewportHeight.value = el.clientHeight
         })
         resizeObserver.observe(el)
-        if (follow.value) el.scrollTop = el.scrollHeight
-        scrollTop.value = el.scrollTop
     }
-    void nextTick(measureRendered)
+    void nextTick(() => {
+        measureRendered()
+        if (restored.value !== null) void nextTick(tryRestoreScroll)
+    })
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener('mousedown', closeMenu)
     window.removeEventListener('keydown', onMenuKeydown)
+    window.removeEventListener('beforeunload', stateSaver.save)
+    stateSaver.cancel()
+    // 路由离开 / 组件卸载时也持久化（刷新走 beforeunload，两者等价幂等）
+    stateSaver.save()
     resizeObserver?.disconnect()
 })
 </script>
