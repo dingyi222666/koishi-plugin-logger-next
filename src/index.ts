@@ -3,7 +3,7 @@ import { dirname, resolve } from "path";
 import { mkdir, readdir, rm } from "fs/promises";
 import { fileURLToPath } from "url";
 import { DataService } from "@koishijs/plugin-console";
-import { FileWriter } from "./file";
+import { FileWriter, readLogs } from "./file";
 
 declare module "@koishijs/console" {
   namespace Console {
@@ -32,6 +32,7 @@ class LogProvider extends DataService<Logger.Record[]> {
   constructor(
     ctx: Context,
     private getWriter: () => FileWriter,
+    private getHistory: () => Promise<Logger.Record[]>,
   ) {
     super(ctx, "logs", { authority: 4 });
 
@@ -51,7 +52,12 @@ class LogProvider extends DataService<Logger.Record[]> {
   }
 
   async get() {
-    return this.getWriter()?.read();
+    // 历史跨日 / 跨分段读取，当前分段直接取内存（writer.data 在打开时已含文件内容）
+    const [history, current] = await Promise.all([
+      this.getHistory(),
+      this.getWriter()?.read(),
+    ]);
+    return [...history, ...(current ?? [])];
   }
 }
 
@@ -59,6 +65,7 @@ export interface Config {
   root?: string;
   maxAge?: number;
   maxSize?: number;
+  maxLines?: number;
   levels?: Dict<number>;
 }
 
@@ -75,6 +82,9 @@ export const Config: Schema<Config> = Schema.object({
   maxSize: Schema.natural()
     .description("单个日志文件的最大大小（字节）。")
     .default(1024 * 100),
+  maxLines: Schema.natural()
+    .description("加载的最大日志条数（跨日 / 跨分段回溯）。")
+    .default(10000),
   levels: Schema.dict(Schema.natural().default(3)).description(
     "指定模块的输出等级。<br>示例： 左侧写 `debug`，右侧写 `3`",
   ),
@@ -120,9 +130,10 @@ export async function apply(ctx: Context, config: Config) {
     for (const date of Object.keys(files)) {
       if (now - +new Date(date) < maxAge * Time.day) continue;
       for (const index of files[date]) {
-        await rm(`${root}/${date}-${index}.log`).catch((error) => {
-          ctx.logger("logger").warn(error);
-        });
+        // 文件可能已被外部删除：ENOENT 属于正常清理，不告警
+        await rm(`${root}/${date}-${index}.log`, { force: true }).catch(
+          (error) => ctx.logger("logger").warn(error),
+        );
       }
       delete files[date];
     }
@@ -130,6 +141,9 @@ export async function apply(ctx: Context, config: Config) {
 
   const date = new Date().toISOString().slice(0, 10);
   createFile(date, Math.max(...(files[date] ?? [0])) + 1);
+
+  // 初始快照：跨日 / 跨分段回溯 maxLines 条；当前分段由 writer.data 提供
+  const history = await readLogs(root, files, config.maxLines);
 
   let buffer: Logger.Record[] = [];
   let recordId = 0;
@@ -191,5 +205,11 @@ export async function apply(ctx: Context, config: Config) {
     target.record(record);
   }
 
-  ctx.plugin(LogProvider, () => writer);
+  ctx.plugin(
+    class extends LogProvider {
+      constructor(ctx: Context) {
+        super(ctx, () => writer, async () => history);
+      }
+    },
+  );
 }

@@ -1,5 +1,5 @@
-import { FileHandle, open } from 'fs/promises';
-import { Logger } from 'koishi';
+import { FileHandle, open, readFile } from 'fs/promises';
+import { Dict, Logger } from 'koishi';
 import { Buffer } from 'buffer';
 
 export class FileWriter
@@ -64,4 +64,33 @@ export class FileWriter
     const handle = await this.task;
     await handle.close();
   }
+}
+
+/** 按「日期新→旧、分段大→小」回溯日志文件，取最新 limit 条，按时间正序返回。 */
+export async function readLogs(root: string, files: Dict<number[]>, limit: number)
+{
+  const output: Logger.Record[] = [];
+  const dates = Object.keys(files).sort().reverse();
+  for (const date of dates)
+  {
+    for (const index of [...files[date]!].sort((a, b) => b - a))
+    {
+      let text: string;
+      try
+      {
+        text = await readFile(`${root}/${date}-${index}.log`, 'utf-8');
+      } catch { continue; }
+      const lines = text.trimEnd().split('\n').reverse();
+      for (const line of lines)
+      {
+        if (output.length >= limit) break;
+        try
+        {
+          output.push(JSON.parse(line));
+        } catch { }
+      }
+      if (output.length >= limit) return output.reverse();
+    }
+  }
+  return output.reverse();
 }
