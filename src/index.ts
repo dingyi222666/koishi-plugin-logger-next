@@ -1,15 +1,22 @@
-import { Context, Dict, Logger, remove, Schema, Time } from "koishi";
+import { Context, Dict, Logger, remove, Schema, Time, valueMap } from "koishi";
 import { dirname, resolve } from "path";
 import { mkdir, readdir, rm } from "fs/promises";
 import { fileURLToPath } from "url";
 import { DataService } from "@koishijs/plugin-console";
-import { FileWriter, readLogs } from "./file";
+import { FileWriter, LogCursor, readLogs } from "./file";
 
 declare module "@koishijs/console" {
   namespace Console {
     interface Services {
       logs: DataService<Logger.Record[]>;
     }
+  }
+
+  interface Events {
+    "logs/fetch"(query: {
+      before?: LogCursor;
+      limit?: number;
+    }): Promise<Logger.Record[]>;
   }
 }
 
@@ -31,8 +38,10 @@ const baseDir =
 class LogProvider extends DataService<Logger.Record[]> {
   constructor(
     ctx: Context,
+    private root: string,
+    private files: Dict<number[]>,
     private getWriter: () => FileWriter,
-    private getHistory: () => Promise<Logger.Record[]>,
+    private maxLines: number,
   ) {
     super(ctx, "logs", { authority: 4 });
 
@@ -49,17 +58,34 @@ class LogProvider extends DataService<Logger.Record[]> {
               prod: resolve(baseDir, "../dist"),
             },
     );
+
+    // 翻到接近顶部时回拉更早的历史，避免一次性下发整个缓冲。
+    // depth 上限 = maxLines：往回拉得再深，也不会读到比这更老的。
+    ctx.console.addListener("logs/fetch", ({ before, limit = PAGE }) =>
+      readLogs(this.root, this.past(), limit, before, this.maxLines),
+    );
+  }
+
+  /** 当前活跃分段之外的文件索引（活跃分段由 writer.data 提供，避免重复）。 */
+  private past(): Dict<number[]> {
+    const writer = this.getWriter();
+    return valueMap(this.files, (indexes, date) =>
+      date === writer?.date ? indexes.slice(0, -1) : indexes,
+    );
   }
 
   async get() {
-    // 历史跨日 / 跨分段读取，当前分段直接取内存（writer.data 在打开时已含文件内容）
+    // 只下发最近一页，更早的由 logs/fetch 增量回拉（总深度不超过 maxLines）。
     const [history, current] = await Promise.all([
-      this.getHistory(),
+      readLogs(this.root, this.past(), PAGE, undefined, this.maxLines),
       this.getWriter()?.read(),
     ]);
     return [...history, ...(current ?? [])];
   }
 }
+
+/** 初始下发与每次回拉的页大小。 */
+const PAGE = 1000;
 
 export interface Config {
   root?: string;
@@ -142,9 +168,6 @@ export async function apply(ctx: Context, config: Config) {
   const date = new Date().toISOString().slice(0, 10);
   createFile(date, Math.max(...(files[date] ?? [0])) + 1);
 
-  // 初始快照：跨日 / 跨分段回溯 maxLines 条；当前分段由 writer.data 提供
-  const history = await readLogs(root, files, config.maxLines);
-
   let buffer: Logger.Record[] = [];
   let recordId = 0;
   const update = ctx.throttle(() => {
@@ -208,7 +231,7 @@ export async function apply(ctx: Context, config: Config) {
   ctx.plugin(
     class extends LogProvider {
       constructor(ctx: Context) {
-        super(ctx, () => writer, async () => history);
+        super(ctx, root, files, () => writer, config.maxLines ?? 0);
       }
     },
   );

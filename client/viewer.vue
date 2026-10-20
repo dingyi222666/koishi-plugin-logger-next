@@ -186,6 +186,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Logger } from 'koishi'
 import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
 import { Bottom, Delete, Sort } from '@element-plus/icons-vue'
+import { send, store } from '@koishijs/client'
 import LogRow from './LogRow.vue'
 import { captureAnchor, restoreAnchor } from './anchor'
 import { ansiPlain } from './ansi'
@@ -629,7 +630,41 @@ function onScroll(): void {
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32
     if (atBottom !== follow.value) follow.value = atBottom
     if (atBottom && newCount.value > 0) newCount.value = 0
+    if (el.scrollTop < 200) void fetchMore()
     stateSaver.schedule()
+}
+
+// ── 历史增量回拉：翻到接近顶部时向服务端要更早的一段，前插到 store.logs ──
+let fetching = false
+let exhausted = false
+
+async function fetchMore(): Promise<void> {
+    const first = entries.value[0]
+    if (!first || fetching || exhausted) return
+    fetching = true
+    try {
+        const list = await send('logs/fetch', {
+            before: { timestamp: first.timestamp, id: first.id },
+            limit: 1000,
+        })
+        if (!list?.length) {
+            exhausted = true
+            return
+        }
+        // 回拉会改变上方总高度：先记锚点，prepend 后把滚动补回去。
+        const el = scrollEl.value
+        const anchor = el
+            ? captureAnchor(el, rows.value, layout)
+            : undefined
+        store.logs?.unshift(...list)
+        void nextTick(() => {
+            if (!el || !anchor) return
+            restoreAnchor(el, anchor, rows.value, layout)
+            scrollTop.value = el.scrollTop
+        })
+    } finally {
+        fetching = false
+    }
 }
 
 function scrollToEnd(): void {
